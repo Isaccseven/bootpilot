@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/boot-core", "crates/boot-windows", "crates/boot-admin", "crates/boot-service", "crates/boot-cli", "crates/boot-mcp"]
+members = ["crates/boot-core", "crates/boot-windows", "crates/boot-admin", "crates/boot-service", "crates/boot-cli", "crates/boot-mcp", "src-tauri"]
 resolver = "2"
 
 [workspace.package]

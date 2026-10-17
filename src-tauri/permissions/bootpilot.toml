@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "bootpilot-operations"
+description = "Typed boot service and narrow Codex integration only; no shell or filesystem access."
+commands.allow = ["get_status", "refresh", "diagnose", "prepare", "apply", "list_backups", "get_integration_status", "register_codex"]

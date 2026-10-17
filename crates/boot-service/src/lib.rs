@@ -1,5 +1,6 @@
 //! Shared application service. Cached data never authorizes a boot operation.
 mod client;
+pub mod integration;
 
 use boot_core::*;
 use boot_windows::{BrokerClient, BrokerRequest, BrokerResponse};

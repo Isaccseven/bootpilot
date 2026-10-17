@@ -8,6 +8,33 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args().skip(1).collect();
     let json = args.iter().any(|value| value == "--json");
+    if args
+        .first()
+        .is_some_and(|command| command == "register-codex")
+    {
+        let path = match args.as_slice() {
+            [_, flag, path] if flag == "--mcp-path" => Some(path),
+            [_, flag, path, json_flag] if flag == "--mcp-path" && json_flag == "--json" => {
+                Some(path)
+            }
+            _ => None,
+        };
+        let result = path.ok_or_else(|| BootError::new(ErrorCode::InvalidRequest,
+            "Aufruf: boot-cli register-codex --mcp-path <absoluter-installierter-Pfad> [--json]"))
+            .and_then(|path| boot_service::integration::register_codex_at(
+                &boot_service::integration::codex_config_path()?, std::path::Path::new(path)))
+            .and_then(|result| print_json(&result));
+        return finish(result, json);
+    }
+    if matches!(args.as_slice(), [command] if command == "integration-status")
+        || matches!(args.as_slice(), [command, flag] if command == "integration-status" && flag == "--json")
+    {
+        return finish(
+            boot_service::integration::get_integration_status()
+                .and_then(|status| print_json(&status)),
+            json,
+        );
+    }
     let command = match args.as_slice() {
         [command] if ["status", "refresh", "diagnose", "backups"].contains(&command.as_str()) => {
             command.as_str()
@@ -22,7 +49,7 @@ fn main() -> ExitCode {
             emit_error(
                 &BootError::new(
                     ErrorCode::InvalidRequest,
-                    "Aufruf: boot-cli status|refresh|diagnose|backups [--json]",
+                    "Aufruf: boot-cli status|refresh|diagnose|backups|integration-status [--json]; register-codex --mcp-path <Pfad> [--json]",
                 ),
                 json,
             );
@@ -62,6 +89,9 @@ fn main() -> ExitCode {
             .and_then(|backups| print_json(&backups)),
         _ => unreachable!("validated command"),
     };
+    finish(result, json)
+}
+fn finish(result: Result<(), BootError>, json: bool) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

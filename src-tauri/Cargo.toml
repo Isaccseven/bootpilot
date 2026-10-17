@@ -1,0 +1,31 @@
+[package]
+name = "bootpilot-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+default-run = "bootpilot"
+build = "build.rs"
+
+[lib]
+name = "bootpilot_app"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "bootpilot"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.4", features = [] }
+boot-core = { path = "../crates/boot-core" }
+boot-service = { path = "../crates/boot-service" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

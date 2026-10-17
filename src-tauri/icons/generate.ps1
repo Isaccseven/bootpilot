@@ -1,0 +1,26 @@
+# Original BootPilot mark. No third-party artwork. Regenerates PNG/ICO with .NET.
+Add-Type -AssemblyName System.Drawing
+$taskBitmap = [System.Drawing.Bitmap]::new(256, 256)
+$taskGraphics = [System.Drawing.Graphics]::FromImage($taskBitmap)
+$taskGraphics.SmoothingMode = 'AntiAlias'
+$taskGraphics.Clear([System.Drawing.Color]::Transparent)
+$taskBackground = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#153c49'))
+$taskGraphics.FillRectangle($taskBackground, 8, 8, 240, 240)
+$taskWhitePen = [System.Drawing.Pen]::new([System.Drawing.ColorTranslator]::FromHtml('#f4f7f4'),18)
+$taskMark = [System.Drawing.Drawing2D.GraphicsPath]::new()
+$taskMark.AddLines([System.Drawing.PointF[]]@([System.Drawing.PointF]::new(70,176),[System.Drawing.PointF]::new(70,80),[System.Drawing.PointF]::new(128,80)))
+$taskMark.AddBezier(128,80,158,80,172,114,148,128)
+$taskMark.AddBezier(148,128,178,144,162,176,132,176)
+$taskMark.AddLine(132,176,70,176)
+$taskGraphics.DrawPath($taskWhitePen,$taskMark)
+$taskMintPen = [System.Drawing.Pen]::new([System.Drawing.ColorTranslator]::FromHtml('#7bdab8'),15)
+$taskMintPen.StartCap = 'Round'; $taskMintPen.EndCap = 'Round'; $taskMintPen.LineJoin = 'Round'
+$taskGraphics.DrawLine($taskMintPen,72,128,184,128)
+$taskGraphics.DrawLines($taskMintPen,[System.Drawing.Point[]]@([System.Drawing.Point]::new(160,104),[System.Drawing.Point]::new(184,128),[System.Drawing.Point]::new(160,152)))
+$taskBitmap.Save((Join-Path $PSScriptRoot 'icon.png'),[System.Drawing.Imaging.ImageFormat]::Png)
+$taskPng = [System.IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'icon.png'))
+$taskIcon = [System.IO.BinaryWriter]::new([System.IO.File]::Create((Join-Path $PSScriptRoot 'icon.ico')))
+$taskIcon.Write([uint16]0); $taskIcon.Write([uint16]1); $taskIcon.Write([uint16]1)
+$taskIcon.Write([byte]0); $taskIcon.Write([byte]0); $taskIcon.Write([byte]0); $taskIcon.Write([byte]0)
+$taskIcon.Write([uint16]1); $taskIcon.Write([uint16]32); $taskIcon.Write([uint32]$taskPng.Length); $taskIcon.Write([uint32]22); $taskIcon.Write($taskPng)
+$taskIcon.Dispose(); $taskMintPen.Dispose(); $taskWhitePen.Dispose(); $taskMark.Dispose(); $taskBackground.Dispose(); $taskGraphics.Dispose(); $taskBitmap.Dispose()
