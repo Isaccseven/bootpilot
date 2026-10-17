@@ -506,3 +506,36 @@ fn preamble_cannot_redirect_trusted_source_or_load_unknown_modules() {
         );
     }
 }
+#[test]
+fn filesystem_uuid_matching_ignores_case_but_not_identity() {
+    for spelling in ["ab12-cd34", "Ab12-cD34"] {
+        let (mut s, id) = candidate_snapshot();
+        s.linux_candidates[0].filesystem_uuid = spelling.into();
+        let request = PlanRequest::Cachyos {
+            candidate_id: id,
+            title: "CachyOS".into(),
+        };
+        assert!(
+            validate_request(&request, &s).is_ok(),
+            "UUID {spelling} must match uppercase volume identity"
+        );
+        let plan = prepare_plan(&s, request, now()).unwrap();
+        let user = String::from_utf8(bytes(&plan, Target::GrubUser)).unwrap();
+        assert!(user.contains(&format!("--set=root {spelling}; then")));
+        assert!(user.contains("/managed/linux-cachyos/vmlinuz"));
+    }
+    let (mut s, id) = candidate_snapshot();
+    s.linux_candidates[0].filesystem_uuid = "ab12-cd35".into();
+    let request = PlanRequest::Cachyos {
+        candidate_id: id,
+        title: "CachyOS".into(),
+    };
+    assert_eq!(
+        validate_request(&request, &s).unwrap_err().code,
+        ErrorCode::InvalidCandidate
+    );
+    assert_eq!(
+        prepare_plan(&s, request, now()).unwrap_err().code,
+        ErrorCode::InvalidCandidate
+    );
+}

@@ -165,7 +165,10 @@ pub(crate) fn validate_candidate(c: &LinuxCandidate, s: &Snapshot) -> BootResult
     let volume_ok = s.sources.volumes == CollectionState::Complete
         && !c.volume_id.is_nil()
         && volumes.len() == 1
-        && volumes[0].filesystem_uuid.as_deref() == Some(c.filesystem_uuid.as_str())
+        && volumes[0]
+            .filesystem_uuid
+            .as_deref()
+            .is_some_and(|uuid| uuid.eq_ignore_ascii_case(&c.filesystem_uuid))
         && volumes[0]
             .filesystem
             .as_deref()
