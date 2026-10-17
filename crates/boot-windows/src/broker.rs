@@ -142,10 +142,32 @@ pub fn dispatch(request: BrokerRequest, caller_sid: &str) -> BootResult<BrokerRe
         BrokerRequest::ListBackups => crate::store::ProtectedStore::open(caller_sid)?
             .list_backups()
             .map(BrokerResponse::Backups),
-        BrokerRequest::Prepare(_) | BrokerRequest::Apply { .. } => Err(crate::error(
-            ErrorCode::NotImplemented,
-            "Planen und Anwenden sind bis zum Transaktionsdienst gesperrt",
-        )),
+        BrokerRequest::Prepare(request) => {
+            #[cfg(windows)]
+            let _lock = crate::write::MachineLock::acquire()?;
+            let mut store = crate::ProtectedStore::open(caller_sid)?;
+            let snapshot = crate::collect_snapshot()?;
+            let plan = match request {
+                PlanRequest::Restore { backup_id } => prepare_restore(
+                    &snapshot,
+                    &store.load_backup(backup_id)?,
+                    chrono::Utc::now(),
+                )?,
+                request => prepare_plan(&snapshot, request, chrono::Utc::now())?,
+            };
+            store.save_plan(&plan)?;
+            Ok(BrokerResponse::ChangePlan(plan))
+        }
+        BrokerRequest::Apply { plan_id } => {
+            #[cfg(windows)]
+            let _lock = crate::write::MachineLock::acquire()?;
+            #[cfg(windows)]
+            crate::write::reject_grub2win()?;
+            let mut store = crate::ProtectedStore::open(caller_sid)?;
+            let mut system = crate::WindowsSystem::for_transaction();
+            apply_plan(&mut system, &mut store, plan_id, chrono::Utc::now())
+                .map(BrokerResponse::ApplyReport)
+        }
     }
 }
 #[cfg(windows)]

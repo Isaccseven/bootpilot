@@ -95,7 +95,9 @@ impl ProtectedStore {
                 "Speicherdatensatz zu groß",
             ));
         }
-        // New immutable records; no truncate/replace of an existing plan or journal.
+        // Publish a complete, flushed immutable record. A crash while writing the
+        // staging file cannot leave a truncated authoritative backup or journal.
+        let staging = self.root.join(format!("{}.pending", Uuid::new_v4()));
         #[cfg(windows)]
         let mut file = unsafe {
             use crate::native::*;
@@ -104,7 +106,7 @@ impl ProtectedStore {
             let descriptor = SecurityDescriptor::new("O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)")?;
             let attributes = descriptor.attributes();
             let handle = CreateFileW(
-                PCWSTR(wide(path).as_ptr()),
+                PCWSTR(wide(&staging).as_ptr()),
                 FILE_GENERIC_WRITE.0 | READ_CONTROL.0,
                 FILE_SHARE_READ,
                 Some(&attributes),
@@ -125,7 +127,7 @@ impl ProtectedStore {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(path)
+            .open(&staging)
             .map_err(crate::io_error)?;
         #[cfg(windows)]
         {
@@ -133,7 +135,34 @@ impl ProtectedStore {
             verify_security(windows::Win32::Foundation::HANDLE(file.as_raw_handle()))?;
         }
         file.write_all(&bytes).map_err(crate::io_error)?;
-        file.sync_all().map_err(crate::io_error)
+        file.sync_all().map_err(crate::io_error)?;
+        drop(file);
+        #[cfg(windows)]
+        {
+            use crate::native::*;
+            use windows::{Win32::Storage::FileSystem::*, core::PCWSTR};
+            // No REPLACE_EXISTING: concurrent or consumed plans cannot be overwritten.
+            unsafe {
+                MoveFileExW(
+                    PCWSTR(wide(&staging).as_ptr()),
+                    PCWSTR(wide(path).as_ptr()),
+                    MOVEFILE_WRITE_THROUGH,
+                )
+            }
+            .map_err(|e| {
+                let _ = std::fs::remove_file(&staging);
+                if [0x80070050, 0x800700b7].contains(&(e.code().0 as u32)) {
+                    crate::error(ErrorCode::PlanConsumed, "Datensatz existiert bereits")
+                } else {
+                    win_error(e)
+                }
+            })
+        }
+        #[cfg(not(windows))]
+        {
+            std::fs::hard_link(&staging, path).map_err(crate::io_error)?;
+            std::fs::remove_file(&staging).map_err(crate::io_error)
+        }
     }
 }
 impl PlanStore for ProtectedStore {
@@ -314,6 +343,16 @@ impl PlanStore for ProtectedStore {
 }
 #[cfg(windows)]
 fn verify_security(handle: windows::Win32::Foundation::HANDLE) -> BootResult<()> {
+    verify_object_security(
+        handle,
+        windows::Win32::Security::Authorization::SE_FILE_OBJECT,
+    )
+}
+#[cfg(windows)]
+pub(crate) fn verify_object_security(
+    handle: windows::Win32::Foundation::HANDLE,
+    object_type: windows::Win32::Security::Authorization::SE_OBJECT_TYPE,
+) -> BootResult<()> {
     unsafe {
         use crate::native::*;
         use windows::Win32::Security::{Authorization::*, *};
@@ -322,7 +361,7 @@ fn verify_security(handle: windows::Win32::Foundation::HANDLE) -> BootResult<()>
         let mut sd = PSECURITY_DESCRIPTOR::default();
         GetSecurityInfo(
             handle,
-            SE_FILE_OBJECT,
+            object_type,
             OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
             Some(&mut owner),
             None,

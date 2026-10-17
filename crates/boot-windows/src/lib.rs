@@ -26,3 +26,8 @@ pub(crate) fn io_error(e: impl std::fmt::Display + 'static) -> boot_core::BootEr
     error(code, "Windows-Zugriff fehlgeschlagen")
         .with_details(serde_json::json!({"reason":e.to_string()}))
 }
+
+#[cfg(debug_assertions)]
+pub mod store_probe;
+#[cfg(windows)]
+mod write;

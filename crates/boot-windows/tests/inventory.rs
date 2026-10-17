@@ -98,14 +98,14 @@ fn volume_guid_and_snapshot_unknown_fields_are_explicit() {
 }
 #[test]
 fn native_write_adapter_is_closed() {
-    let mut system = boot_windows::WindowsSystem;
+    let mut system = boot_windows::WindowsSystem::default();
     let value = TargetValue::FirmwareOrder(Vec::new());
     assert_eq!(
         system
             .write_target(&Target::FirmwareOrder, &value, &value)
             .unwrap_err()
             .code,
-        ErrorCode::NotImplemented
+        ErrorCode::InvalidRequest
     );
 }
 

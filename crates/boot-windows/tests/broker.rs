@@ -83,19 +83,19 @@ fn wrong_account_session_and_directory_are_rejected() {
     }
 }
 #[test]
-fn prepare_and_apply_cannot_write() {
+fn apply_accepts_only_a_stored_plan_id_and_prepare_has_no_path() {
+    // Do not call native dispatch in tests: enabled handlers are production-only.
     for request in [
-        BrokerRequest::Apply {
-            plan_id: uuid::Uuid::new_v4(),
-        },
-        BrokerRequest::Prepare(PlanRequest::Menu {
-            default_entry_id: "windows".into(),
-            timeout_seconds: 5,
-        }),
+        serde_json::json!({"action":"apply","payload":{"plan_id":uuid::Uuid::new_v4(),"changes":[]}}),
+        serde_json::json!({"action":"apply","payload":{"plan_id":uuid::Uuid::new_v4(),"path":"C:/arbitrary"}}),
+        serde_json::json!({"action":"prepare","payload":{"kind":"menu","default_entry_id":"windows","timeout_seconds":5,"path":"C:/arbitrary"}}),
     ] {
+        let envelope = serde_json::json!({"schema_version":1,"nonce":"x","request":request});
         assert_eq!(
-            dispatch(request, "S-1-5-21-test").unwrap_err().code,
-            ErrorCode::NotImplemented
+            decode_request(&serde_json::to_vec(&envelope).unwrap(), "x")
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidMessage
         );
     }
 }

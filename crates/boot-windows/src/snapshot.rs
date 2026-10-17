@@ -58,43 +58,120 @@ pub fn collect_snapshot() -> BootResult<Snapshot> {
     }
 }
 #[derive(Default)]
-pub struct WindowsSystem;
+pub struct WindowsSystem {
+    authorized: bool,
+    location: Option<GrubLocation>,
+    #[cfg(windows)]
+    files: Option<(crate::write::GuardedFile, crate::write::GuardedFile)>,
+}
+impl WindowsSystem {
+    pub(crate) fn for_transaction() -> Self {
+        Self {
+            authorized: true,
+            ..Self::default()
+        }
+    }
+    #[cfg(windows)]
+    fn file(&mut self, target: Target) -> BootResult<&mut crate::write::GuardedFile> {
+        if self.files.is_none() {
+            let location = self.location.as_ref().ok_or_else(|| {
+                super::error(
+                    ErrorCode::IncompleteSnapshot,
+                    "Autoritatives GRUB-Ziel fehlt.",
+                )
+            })?;
+            self.files = Some((
+                crate::write::GuardedFile::open(std::path::Path::new(&location.main_path))?,
+                crate::write::GuardedFile::open(std::path::Path::new(&location.user_path))?,
+            ));
+        }
+        let (main, user) = self.files.as_mut().unwrap();
+        Ok(if target == Target::GrubMain {
+            main
+        } else {
+            user
+        })
+    }
+}
 impl SystemAccess for WindowsSystem {
     fn read_snapshot(&mut self) -> BootResult<Snapshot> {
-        collect_snapshot()
+        #[cfg(windows)]
+        {
+            self.files = None;
+        }
+        let snapshot = collect_snapshot()?;
+        self.location = if snapshot.sources.grub == CollectionState::Complete {
+            snapshot.grub_location.clone()
+        } else {
+            None
+        };
+        Ok(snapshot)
     }
     fn read_target(&mut self, target: &Target) -> BootResult<TargetValue> {
-        let snapshot = collect_snapshot()?;
         match target {
-            Target::FirmwareOrder if snapshot.sources.bcd == CollectionState::Complete => {
+            Target::FirmwareOrder => {
+                let snapshot = collect_snapshot()?;
+                if snapshot.sources.bcd != CollectionState::Complete
+                    || snapshot.sources.firmware != CollectionState::Complete
+                {
+                    return Err(super::error(
+                        ErrorCode::IncompleteSnapshot,
+                        "Firmware ist nicht vollständig erfasst.",
+                    ));
+                }
                 Ok(TargetValue::FirmwareOrder(snapshot.firmware_order))
             }
-            Target::GrubMain | Target::GrubUser => snapshot
-                .grub
-                .map(|g| {
-                    TargetValue::FileBytes(if *target == Target::GrubMain {
-                        g.main_bytes
-                    } else {
-                        g.user_bytes
-                    })
-                })
-                .ok_or_else(|| {
-                    super::error(
-                        ErrorCode::IncompleteSnapshot,
-                        "GRUB-Datei nicht vollständig erfasst",
-                    )
-                }),
+            #[cfg(windows)]
+            Target::GrubMain | Target::GrubUser => {
+                self.file(*target)?.read().map(TargetValue::FileBytes)
+            }
+            #[cfg(not(windows))]
             _ => Err(super::error(
-                ErrorCode::IncompleteSnapshot,
-                "Bootquelle nicht vollständig erfasst",
+                ErrorCode::NotImplemented,
+                "Windows erforderlich",
             )),
         }
     }
-    fn write_target(&mut self, _: &Target, _: &TargetValue, _: &TargetValue) -> BootResult<()> {
-        Err(super::error(
-            ErrorCode::NotImplemented,
-            "Boot-Schreiben wird erst durch den Transaktionsdienst freigegeben",
-        ))
+    fn write_target(
+        &mut self,
+        target: &Target,
+        expected: &TargetValue,
+        replacement: &TargetValue,
+    ) -> BootResult<()> {
+        if !self.authorized {
+            return Err(super::error(
+                ErrorCode::InvalidRequest,
+                "Schreiben erfordert eine geprüfte Helfertransaktion.",
+            ));
+        }
+        #[cfg(windows)]
+        {
+            crate::write::reject_grub2win()?;
+            match (target, expected, replacement) {
+                (
+                    Target::FirmwareOrder,
+                    TargetValue::FirmwareOrder(old),
+                    TargetValue::FirmwareOrder(new),
+                ) => crate::bcd::write_order(old, new),
+                (
+                    Target::GrubMain | Target::GrubUser,
+                    TargetValue::FileBytes(old),
+                    TargetValue::FileBytes(new),
+                ) => self.file(*target)?.replace(old, new),
+                _ => Err(super::error(
+                    ErrorCode::InvalidRequest,
+                    "Ziel und Werttyp stimmen nicht überein.",
+                )),
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (target, expected, replacement);
+            Err(super::error(
+                ErrorCode::NotImplemented,
+                "Windows erforderlich",
+            ))
+        }
     }
 }
 
@@ -311,20 +388,11 @@ mod native_inventory {
             main_path: main.to_string_lossy().into(),
             user_path: user.to_string_lossy().into(),
         });
-        snapshot.grub = Some(GrubDocument {
-            main_bytes,
-            user_bytes,
-            entries: Vec::new(),
-            default_entry_id: None,
-            timeout_seconds: None,
-            write_supported: false,
-            write_block_reason: Some(
-                "Rohdaten erfasst; Parserprüfung noch nicht angeschlossen".into(),
-            ),
-        });
+        snapshot.grub = Some(parse_grub(&main_bytes, &user_bytes)?);
         if failures.is_empty() {
             Ok(())
         } else {
+            snapshot.grub.as_mut().unwrap().write_supported = false;
             snapshot.grub.as_mut().unwrap().write_block_reason =
                 Some("GRUB-Installation ist wegen unlesbarer Suchpfade nicht eindeutig".into());
             Err(crate::error(

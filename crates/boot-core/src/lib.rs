@@ -11,3 +11,5 @@ pub mod grub;
 pub mod plan;
 pub use grub::parse_grub;
 pub use plan::{prepare_plan, target_checksum};
+pub mod transaction;
+pub use transaction::{apply_plan, prepare_restore};
