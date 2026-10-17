@@ -1,5 +1,6 @@
 //! User-local snapshot persistence, entirely separate from the protected plan store.
 use boot_core::*;
+use fs2::FileExt;
 use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
@@ -8,6 +9,34 @@ use std::{
 use uuid::Uuid;
 
 const MAX_CACHE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Serialize collection and mutation across GUI/MCP/CLI processes sharing a cache.
+/// Without this lease an older refresh could repopulate the cache after apply.
+pub(crate) fn lock_cache_operation(path: Option<&Path>) -> BootResult<Option<fs::File>> {
+    let Some(path) = path else { return Ok(None) };
+    let parent = path
+        .parent()
+        .ok_or_else(|| BootError::new(ErrorCode::Io, "Cacheverzeichnis fehlt."))?;
+    fs::create_dir_all(parent).map_err(cache_error)?;
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path.with_extension("operation.lock"))
+        .map_err(cache_error)?;
+    lock.lock_exclusive().map_err(cache_error)?;
+    Ok(Some(lock))
+}
+
+pub(crate) fn invalidate_cache(path: Option<&Path>) -> BootResult<()> {
+    let Some(path) = path else { return Ok(()) };
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(cache_error(error)),
+    }
+}
 
 pub(crate) fn default_cache_path() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|root| {

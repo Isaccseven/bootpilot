@@ -53,6 +53,7 @@ impl BootService {
 
     pub fn refresh(&self) -> BootResult<Snapshot> {
         let _operation = self.lock_operation()?;
+        let _cache_operation = client::lock_cache_operation(self.cache_path.as_deref())?;
         let snapshot = match self.client.request(BrokerRequest::Refresh)? {
             BrokerResponse::Snapshot(snapshot) => *snapshot,
             _ => return Err(unexpected()),
@@ -95,6 +96,13 @@ impl BootService {
             ));
         }
         let _operation = self.lock_operation()?;
+        let _cache_operation = client::lock_cache_operation(self.cache_path.as_deref())?;
+        // Invalidate before dispatch: a broker/pipe failure can hide a completed
+        // write. Never return a recent pre-change capture as fresh after apply,
+        // including to another process or after a service restart. If removing
+        // the cache fails, reject before the potentially mutating broker call.
+        client::invalidate_cache(self.cache_path.as_deref())?;
+        *self.snapshot.lock().map_err(|_| poisoned())? = None;
         match self.client.request(BrokerRequest::Apply { plan_id })? {
             BrokerResponse::ApplyReport(report) => Ok(report),
             _ => Err(unexpected()),
