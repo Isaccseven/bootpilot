@@ -1,6 +1,6 @@
 # BootPilot — Entwurf der ersten Version
 
-Stand: 17. Oktober 2026. Der Nutzer hat die Richtung **eigene Windows-App mit Steuerung durch Codex über MCP** und den Funktionsumfang in diesem Entwurf im Chat bestätigt. Die Prüfung dieses schriftlichen Entwurfs steht noch aus.
+Stand: 17. Oktober 2026. Der Nutzer hat diesen schriftlichen Entwurf freigegeben und anschließend ausdrücklich **Tauri** als Desktop-Technik gewählt. Richtung und Funktionsumfang bleiben **eigene Windows-App mit Steuerung durch Codex über MCP**.
 
 ## Ziel
 
@@ -21,7 +21,9 @@ Alle Ansichten verwenden echte Systemdaten. Ein separat gekennzeichneter Demonst
 
 ## Architektur
 
-Technik: C# und .NET 10 LTS, WPF für die Windows-Oberfläche, offizielles C# MCP SDK für den lokalen stdio-Server. Die Veröffentlichung enthält die benötigte .NET-Laufzeit für Windows x64.
+Technik: **Tauri 2**, React und TypeScript für die Oberfläche sowie ein gemeinsamer Rust-Kern. Der separate lokale stdio-MCP-Server verwendet das offizielle Rust MCP SDK (`rmcp`). Die Windows-x64-Veröffentlichung enthält App, MCP-Server und Administrator-Helfer; die Oberfläche verwendet die Windows-WebView2-Laufzeit. Deren Verfügbarkeit wird bei der Installation geprüft.
+
+Die WebView lädt ausschließlich mitgelieferte lokale Inhalte. Explizite Tauri-Capabilities begrenzen die erlaubten Anwendungskommandos. Die Oberfläche erhält keine allgemeine Shell- oder Dateisystemfreigabe; alle Bootfunktionen durchlaufen die Validierung des gemeinsamen Rust-Kerns.
 
 ```mermaid
 flowchart TD
@@ -88,7 +90,9 @@ Lieferung: startbares Windows-x64-Paket, vollständiger eigener Quelltext, Bedie
 
 REA wurde für das installierte Artefakt verwendet. Die portable PE-Ressourcenanalyse lehnte dessen Layout ab; eine erfolgreiche Objdump-Untersuchung lieferte `pei-i386` sowie `UPX0`, `UPX1` und `.rsrc`. Das ist statische Evidenz und keine Beobachtung der Programmausführung. Vorhandener AutoIt-Quelltext wurde ergänzend gelesen; seine exakte Übereinstimmung mit der EXE ist nicht bewiesen. Details werden im separaten REA-Bericht festgehalten.
 
-- [Microsoft: WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/)
+- [Tauri: Windows-Voraussetzungen](https://v2.tauri.app/start/prerequisites/)
+- [Tauri: Capabilities](https://v2.tauri.app/security/capabilities/)
+- [Offizielles Rust MCP SDK](https://github.com/modelcontextprotocol/rust-sdk)
 - [Microsoft: begrenzte Administratorprozesse](https://learn.microsoft.com/en-us/windows/win32/secbp/running-with-administrator-privileges)
 - [Grub2Win: Benutzersektion](https://grub2win.sourceforge.io/Managingthebootmenu.html)
 - [Limine Entry Tool: gepflegte Kernelpfade](https://gitlab.com/Zesko/limine-entry-tool/-/raw/master/README.md)
