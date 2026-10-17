@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "00000000-0000-0000-0000-000000000001",
+  "captured_at": "2026-10-17T10:00:00Z",
+  "sources": {
+    "firmware": "unavailable", "bcd": "unavailable", "boot_current": "unavailable",
+    "secure_boot": "unknown", "bitlocker": "unknown", "grub": "unknown", "linux": "unknown"
+  },
+  "firmware_entries": [], "firmware_order": [], "boot_current": null,
+  "secure_boot": null, "bitlocker": null, "grub": null, "grub_location": null,
+  "linux_candidates": [],
+  "source_errors": [
+    { "source": "firmware", "error": { "code": "access_denied", "message": "Firmware-Abfrage nicht erlaubt.", "details": { "native_code": 5 } } }
+  ]
+}
