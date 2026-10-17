@@ -34,7 +34,12 @@ try {
         $package = $lock.packages[$key]
         if ($key -eq '' -or $package['dev'] -eq $true) { continue }
         $manifest = Join-Path $key 'package.json'
-        if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Production npm package is missing: $key" }
+        if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+            # npm locks optional packages for other platforms too. They are not bundled
+            # when absent; installed optional packages still need their notices below.
+            if ($package['optional'] -eq $true -or $package['devOptional'] -eq $true) { continue }
+            throw "Production npm package is missing: $key"
+        }
         $installed = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
         $null = $builder.AppendLine("`n===== npm: $($installed.name) $($installed.version) =====")
         $null = $builder.AppendLine("License: $($package['license'])")

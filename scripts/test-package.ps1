@@ -70,6 +70,43 @@ try {
     $bytes[0x84] = 0x64; $bytes[0x85] = 0x86; $bytes[0x97] = 0x20
     [IO.File]::WriteAllBytes($bad, $bytes)
     Assert-Rejected { Assert-WindowsX64Executable $bad } 'dll_instead_of_executable_rejected'
+
+    $noticeFixture = Join-Path $scratch 'notices'
+    $noticeScripts = New-Item -ItemType Directory -Path (Join-Path $noticeFixture 'scripts') -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'generate-notices.ps1') -Destination $noticeScripts.FullName
+    $noticeLock = @{ packages = @{
+        '' = @{ name = 'fixture' }
+        'node_modules/required-runtime' = @{ version = '1.0.0'; license = 'MIT' }
+        'node_modules/optional-runtime' = @{ version = '1.0.0'; license = 'MIT'; optional = $true }
+        'node_modules/shared-tool' = @{ version = '1.0.0'; license = 'MIT'; devOptional = $true }
+        'node_modules/other-platform' = @{ version = '1.0.0'; optional = $true }
+        'node_modules/omitted-shared-tool' = @{ version = '1.0.0'; devOptional = $true }
+        'node_modules/development-tool' = @{ version = '1.0.0'; dev = $true }
+    } }
+    $noticeLock | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $noticeFixture 'package-lock.json') -Encoding utf8NoBOM
+    foreach ($name in @('required-runtime', 'optional-runtime', 'shared-tool')) {
+        $directory = New-Item -ItemType Directory -Path (Join-Path $noticeFixture "node_modules/$name") -Force
+        @{ name = $name; version = '1.0.0' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'package.json') -Encoding utf8NoBOM
+        Set-Content -LiteralPath (Join-Path $directory 'LICENSE') -Value "License text for $name" -Encoding utf8NoBOM
+    }
+    $runNoticeFixture = {
+        # Stub only Cargo's dependency source; exercise the actual npm notice loop and file output.
+        function cargo { $global:LASTEXITCODE = 0; '{"packages":[]}' }
+        & (Join-Path $noticeScripts 'generate-notices.ps1')
+    }
+    & $runNoticeFixture
+    $passed++; Write-Host 'PASS absent_optional_and_dev_optional_packages_accepted'
+    $noticeOutput = Join-Path $noticeFixture 'src-tauri/generated/THIRD-PARTY-LICENSES.txt'
+    $notices = Get-Content -LiteralPath $noticeOutput -Raw -Encoding UTF8
+    foreach ($name in @('required-runtime', 'optional-runtime', 'shared-tool')) {
+        if (-not $notices.Contains("===== npm: $name 1.0.0 =====") -or -not $notices.Contains("License text for $name")) { throw "Installed package notice is missing: $name" }
+        $passed++; Write-Host "PASS installed_package_license_included:$name"
+    }
+    $noticeLock.packages['node_modules/missing-required'] = @{ version = '1.0.0' }
+    $noticeLock | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $noticeFixture 'package-lock.json') -Encoding utf8NoBOM
+    Assert-Rejected $runNoticeFixture 'missing_required_npm_package_rejected'
+    if ((Get-Content -LiteralPath $noticeOutput -Raw -Encoding UTF8) -cne $notices) { throw 'Failed notice generation replaced the previous complete output.' }
+    $passed++; Write-Host 'PASS incomplete_notices_do_not_replace_existing_output'
     Write-Host "PASS $passed package guard checks; no fixture executable was run."
 } finally {
     $resolvedScratch = [IO.Path]::GetFullPath($scratch)
