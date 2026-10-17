@@ -308,6 +308,14 @@ pub fn probe_mcp(path: &Path, timeout: Duration) -> BootResult<()> {
         .map_err(|_| io_error())?;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
+            // Even a continuous stream of unrelated notifications cannot extend
+            // the deadline merely by keeping the channel nonempty.
+            if remaining.is_zero() {
+                return Err(BootError::new(
+                    ErrorCode::Timeout,
+                    "MCP antwortet nicht rechtzeitig.",
+                ));
+            }
             let response = receiver
                 .recv_timeout(remaining)
                 .map_err(|_| {
