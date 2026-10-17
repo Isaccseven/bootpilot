@@ -1,0 +1,90 @@
+name: Windows CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Rust and available frontend checks
+    runs-on: windows-2025
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install repository Rust toolchain
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Get-Content -Raw rust-toolchain.toml
+          if ($toolchain -notmatch '(?m)^channel\s*=\s*"1\.99\.1"\s*$') {
+            throw 'CI expects exact Rust 1.99.1 in rust-toolchain.toml; update the workflow deliberately when changing it.'
+          }
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+          rustc --version
+          if ($LASTEXITCODE -ne 0) { throw 'The repository Rust toolchain is unavailable.' }
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
+
+      - name: Detect frontend readiness
+        id: frontend
+        run: |
+          $ready = Test-Path -LiteralPath package-lock.json -PathType Leaf
+          "ready=$($ready.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if (-not $ready) {
+            'Frontend checks skipped: package-lock.json is not present yet.' >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Set up Node.js
+        if: steps.frontend.outputs.ready == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install frontend dependencies
+        if: steps.frontend.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Check TypeScript
+        if: steps.frontend.outputs.ready == 'true'
+        run: npm run typecheck
+
+      - name: Test user interface
+        if: steps.frontend.outputs.ready == 'true'
+        run: npm run test:ui
+
+      - name: Build frontend
+        if: steps.frontend.outputs.ready == 'true'
+        run: npm run build
+
+      - name: Build MCP server for protocol smoke test
+        if: steps.frontend.outputs.ready == 'true'
+        run: cargo build --locked --package boot-mcp
+
+      - name: Test MCP protocol using test data
+        if: steps.frontend.outputs.ready == 'true'
+        run: npm run test:mcp

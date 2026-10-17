@@ -1,0 +1,189 @@
+name: Windows prerelease
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to package (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Verify and package Windows x64
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Validate requested tag
+        run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
+            throw 'Provide an existing version tag such as v0.1.0 or v0.1.0-alpha.1.'
+          }
+
+      - name: Check out version tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          persist-credentials: false
+
+      - name: Reject incomplete release sources
+        run: |
+          foreach ($path in @('Cargo.lock', 'rust-toolchain.toml', 'package.json', 'package-lock.json', 'src-tauri/tauri.conf.json', 'scripts/package.ps1')) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Release source is incomplete: required file '$path' is missing. No release will be published."
+            }
+          }
+
+      - name: Install repository Rust toolchain
+        run: |
+          $toolchain = Get-Content -Raw rust-toolchain.toml
+          if ($toolchain -notmatch '(?m)^channel\s*=\s*"1\.99\.1"\s*$') {
+            throw 'Release expects exact Rust 1.99.1 in rust-toolchain.toml.'
+          }
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+
+      - name: Check package version and build inputs
+        id: version
+        run: |
+          $metadataJson = cargo metadata --no-deps --locked --format-version 1
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata could not be read.' }
+          $metadata = $metadataJson | ConvertFrom-Json
+          foreach ($name in @('boot-core', 'boot-mcp', 'boot-cli', 'boot-admin')) {
+            $package = @($metadata.packages | Where-Object name -eq $name)
+            if ($package.Count -ne 1 -or "v$($package[0].version)" -cne $env:RELEASE_TAG) {
+              throw "Package '$name' is missing or its version does not match $env:RELEASE_TAG."
+            }
+          }
+          "tag=$env:RELEASE_TAG" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
+
+      - name: Check TypeScript
+        run: npm run typecheck
+
+      - name: Test user interface
+        run: npm run test:ui
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build MCP server for protocol smoke test
+        run: cargo build --locked --package boot-mcp
+
+      - name: Test MCP protocol using test data
+        run: npm run test:mcp
+
+      - name: Build release binaries and NSIS installer
+        run: |
+          $outputDirectory = Join-Path $env:RUNNER_TEMP 'bootpilot-release'
+          if (Test-Path -LiteralPath $outputDirectory) { throw 'Release output directory must start absent.' }
+          pwsh -NoProfile -File ./scripts/package.ps1 -OutputDirectory $outputDirectory
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed. No release will be published.' }
+
+      - name: Validate release assets and create checksums
+        id: assets
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputDirectory = Join-Path $env:RUNNER_TEMP 'bootpilot-release'
+          $version = $env:RELEASE_TAG.Substring(1)
+          $expected = @("BootPilot-$version-windows-x64-setup.exe", "BootPilot-$version-windows-x64.zip")
+          $items = @(Get-ChildItem -LiteralPath $outputDirectory -Force)
+          if ($items.Count -ne 2 -or @($items | Where-Object { $_.PSIsContainer -or $_.Length -eq 0 -or $_.Name -cnotin $expected }).Count -ne 0) {
+            throw 'Packaging must produce exactly the two named, nonempty release files. No release will be published.'
+          }
+          $installer = Join-Path $outputDirectory $expected[0]
+          $stream = [System.IO.File]::OpenRead($installer)
+          try {
+            if ($stream.ReadByte() -ne 77 -or $stream.ReadByte() -ne 90) { throw 'Installer is not a Windows executable.' }
+          } finally { $stream.Dispose() }
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $outputDirectory $expected[1]))
+          try {
+            foreach ($binary in @('bootpilot.exe', 'boot-mcp.exe', 'boot-cli.exe', 'boot-admin.exe')) {
+              $entries = @($zip.Entries | Where-Object { $_.Name -ceq $binary -and $_.Length -gt 0 })
+              if ($entries.Count -ne 1) { throw "Portable package requires exactly one nonempty $binary." }
+            }
+          } finally { $zip.Dispose() }
+          $checksums = foreach ($name in $expected) {
+            $hash = (Get-FileHash -LiteralPath (Join-Path $outputDirectory $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name"
+          }
+          $checksums | Set-Content -LiteralPath (Join-Path $outputDirectory 'SHA256SUMS.txt') -Encoding utf8NoBOM
+          "directory=$outputDirectory" >> $env:GITHUB_OUTPUT
+
+      - name: Upload validated release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-release
+          path: ${{ steps.assets.outputs.directory }}/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub prerelease
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.package.outputs.tag }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download validated release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-release
+          path: release
+
+      - name: Verify downloaded checksums and publish prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd release
+          installer="BootPilot-${RELEASE_TAG#v}-windows-x64-setup.exe"
+          archive="BootPilot-${RELEASE_TAG#v}-windows-x64.zip"
+          test "$(find . -mindepth 1 -maxdepth 1 | wc -l)" -eq 3
+          test -s "$installer"
+          test -s "$archive"
+          test -s SHA256SUMS.txt
+          sha256sum --check --strict SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" "$installer" "$archive" SHA256SUMS.txt \
+            --repo "$GH_REPO" --verify-tag --prerelease --generate-notes \
+            --title "BootPilot $RELEASE_TAG (Windows preview)"
