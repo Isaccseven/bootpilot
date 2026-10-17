@@ -167,6 +167,52 @@ fn element(
     )
 }
 #[cfg(windows)]
+fn optional_loader_path(
+    types: BootResult<Vec<u32>>,
+    read: impl FnOnce() -> BootResult<Variant>,
+) -> BootResult<Option<String>> {
+    if !types?.contains(&0x12000002) {
+        return Ok(None);
+    }
+    match read()? {
+        Variant::String(path) => Ok(Some(path)),
+        _ => Err(crate::error(
+            ErrorCode::VerificationFailed,
+            "BCD-Laderpfad hat einen ungültigen Eigenschaftstyp",
+        )),
+    }
+}
+#[cfg(windows)]
+fn element_types(connection: &WMIConnection, entry: &IWbemClassWrapper) -> BootResult<Vec<u32>> {
+    let path = instance_path(entry, "BcdObject")?;
+    let output = checked(call(
+        connection,
+        "BcdObject",
+        &path,
+        "EnumerateElementTypes",
+        &[],
+    )?)?;
+    let Variant::Array(types) = output
+        .get_property("Types")
+        .map_err(crate::native::wmi_error)?
+    else {
+        return Err(crate::error(
+            ErrorCode::VerificationFailed,
+            "BCD-Elementtypen sind kein Array",
+        ));
+    };
+    types
+        .into_iter()
+        .map(|value| match value {
+            Variant::UI4(kind) => Ok(kind),
+            _ => Err(crate::error(
+                ErrorCode::VerificationFailed,
+                "BCD-Elementtyp ist keine vorzeichenlose Zahl",
+            )),
+        })
+        .collect()
+}
+#[cfg(windows)]
 pub(crate) fn collect(snapshot: &mut Snapshot) -> BootResult<()> {
     let _backup = crate::native::enable_privilege("SeBackupPrivilege")?;
     let _restore = crate::native::enable_privilege("SeRestorePrivilege")?;
@@ -247,13 +293,23 @@ pub(crate) fn collect(snapshot: &mut Snapshot) -> BootResult<()> {
                         format!("BCD {id}")
                     }
                 };
-                // Application paths are optional for firmware hardware entries.
-                let loader_path = element(&connection, &obj, 0x12000002)
-                    .ok()
-                    .and_then(|v| match v.get_property("String").ok()? {
-                        Variant::String(s) => Some(s),
-                        _ => None,
-                    });
+                // Only a successful type enumeration establishes optional absence.
+                // GetElement=false can also mean provider failure and is never silently ignored.
+                let loader_path = match optional_loader_path(
+                    element_types(&connection, &obj),
+                    || {
+                        element(&connection, &obj, 0x12000002)?
+                            .get_property("String")
+                            .map_err(crate::native::wmi_error)
+                    },
+                ) {
+                    Ok(path) => path,
+                    Err(mut error) => {
+                        error.details = serde_json::json!({"entry_id":id,"element_type":0x12000002,"cause":error.details});
+                        errors.push(error);
+                        None
+                    }
+                };
                 snapshot.firmware_entries.push(FirmwareEntry {
                     id,
                     title,
@@ -277,6 +333,42 @@ pub(crate) fn collect(snapshot: &mut Snapshot) -> BootResult<()> {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    #[test]
+    fn missing_optional_path_is_not_a_provider_failure() {
+        assert_eq!(
+            optional_loader_path(Ok(vec![0x12000004]), || panic!(
+                "absent path must not be queried"
+            ))
+            .unwrap(),
+            None
+        );
+    }
+    #[test]
+    fn denied_optional_path_is_not_reported_as_absent() {
+        let error = optional_loader_path(Ok(vec![0x12000002]), || {
+            Err(crate::error(ErrorCode::AccessDenied, "denied"))
+        })
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::AccessDenied);
+    }
+    #[test]
+    fn failed_optional_element_enumeration_cannot_prove_absence() {
+        let error =
+            optional_loader_path(Err(crate::error(ErrorCode::Io, "provider failed")), || {
+                panic!("cannot query without a valid enumeration")
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Io);
+    }
+    #[test]
+    fn malformed_optional_path_is_not_reported_as_absent() {
+        assert_eq!(
+            optional_loader_path(Ok(vec![0x12000002]), || Ok(Variant::UI4(42)))
+                .unwrap_err()
+                .code,
+            ErrorCode::VerificationFailed
+        );
+    }
     #[test]
     fn embedded_objects_use_validated_keys_without_path_metadata() {
         let con = WMIConnection::with_namespace_path("ROOT\\WMI").unwrap();

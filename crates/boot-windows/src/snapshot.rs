@@ -270,10 +270,22 @@ mod native_inventory {
                 match std::fs::symlink_metadata(&main) {
                     Ok(_) => found.push(main),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => failures.push(crate::io_error(e)),
+                    Err(e) => {
+                        let mut error = crate::io_error(e);
+                        error.details["path"] = serde_json::json!(main);
+                        failures.push(error);
+                    }
                 }
             }
         }
+        grub_from_discovery(snapshot, found, failures, read_verified)
+    }
+    fn grub_from_discovery(
+        snapshot: &mut Snapshot,
+        mut found: Vec<PathBuf>,
+        failures: Vec<BootError>,
+        read: impl Fn(&std::path::Path, usize) -> BootResult<Vec<u8>>,
+    ) -> BootResult<()> {
         found.sort();
         found.dedup();
         if found.len() != 1 {
@@ -293,8 +305,8 @@ mod native_inventory {
             .unwrap()
             .join("userfiles")
             .join("usersection.cfg");
-        let main_bytes = read_verified(&main, 512 * 1024)?;
-        let user_bytes = read_verified(&user, 512 * 1024)?;
+        let main_bytes = read(&main, 512 * 1024)?;
+        let user_bytes = read(&user, 512 * 1024)?;
         snapshot.grub_location = Some(GrubLocation {
             main_path: main.to_string_lossy().into(),
             user_path: user.to_string_lossy().into(),
@@ -310,7 +322,17 @@ mod native_inventory {
                 "Rohdaten erfasst; Parserprüfung noch nicht angeschlossen".into(),
             ),
         });
-        Ok(())
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            snapshot.grub.as_mut().unwrap().write_block_reason =
+                Some("GRUB-Installation ist wegen unlesbarer Suchpfade nicht eindeutig".into());
+            Err(crate::error(
+                ErrorCode::IncompleteSnapshot,
+                "Lesbare GRUB-Konfiguration gefunden, Eindeutigkeit der Suche nicht bestätigt",
+            )
+            .with_details(serde_json::json!({"errors":failures})))
+        }
     }
     fn linux(snapshot: &mut Snapshot) -> BootResult<()> {
         let grub = snapshot.grub.as_ref().ok_or_else(|| {
@@ -415,5 +437,39 @@ mod native_inventory {
             }
         }
         Err(crate::error(ErrorCode::IncompleteSnapshot,"Linux-Kandidaten nur aus lesbaren bestehenden Dateien geprüft; nicht lesbare Linux-Dateisysteme bleiben unbekannt").with_details(serde_json::json!({"referenced_candidates":references.len(),"rejected":errors})))
+    }
+    #[cfg(test)]
+    mod review_tests {
+        use super::*;
+        #[test]
+        fn readable_grub_plus_denied_volume_is_partial_and_retains_document() {
+            let mut snapshot = Snapshot::new(Uuid::new_v4(), Utc::now());
+            let denied = crate::error(ErrorCode::AccessDenied, "Zweites Volume nicht lesbar");
+            let result = grub_from_discovery(
+                &mut snapshot,
+                vec![PathBuf::from(r"C:\grub2\grub.cfg")],
+                vec![denied],
+                |_, _| Ok(b"existing configuration".to_vec()),
+            );
+            assert_eq!(result.unwrap_err().code, ErrorCode::IncompleteSnapshot);
+            let grub = snapshot.grub.unwrap();
+            assert_eq!(grub.main_bytes, b"existing configuration");
+            assert!(!grub.write_supported);
+            assert!(grub.write_block_reason.unwrap().contains("eindeutig"));
+        }
+        #[test]
+        fn single_readable_grub_without_discovery_errors_is_complete() {
+            let mut snapshot = Snapshot::new(Uuid::new_v4(), Utc::now());
+            assert!(
+                grub_from_discovery(
+                    &mut snapshot,
+                    vec![PathBuf::from(r"C:\grub2\grub.cfg")],
+                    Vec::new(),
+                    |_, _| Ok(Vec::new())
+                )
+                .is_ok()
+            );
+            assert!(snapshot.grub.is_some());
+        }
     }
 }
