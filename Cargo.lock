@@ -150,14 +150,14 @@ dependencies = [
 
 [[package]]
 name = "boot-admin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "boot-windows",
 ]
 
 [[package]]
 name = "boot-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "boot-core",
  "boot-service",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "boot-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "schemars 1.2.3",
@@ -179,7 +179,7 @@ dependencies = [
 
 [[package]]
 name = "boot-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "boot-core",
  "boot-service",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "boot-service"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "boot-core",
  "boot-windows",
@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "boot-windows"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "boot-core",
  "chrono",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "bootpilot-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "boot-core",
  "boot-service",

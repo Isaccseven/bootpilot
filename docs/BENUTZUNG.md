@@ -1,13 +1,13 @@
 # BootPilot verwenden
 
-BootPilot 0.1.0 ist eine Windows-x64-Vorabversion. Installer und Programme sind
+BootPilot 0.1.1 ist eine Windows-x64-Vorabversion. Installer und Programme sind
 unsigniert. Ein bestandener Programmtest bestätigt keinen erfolgreichen
 Windows- oder CachyOS-Start. Vor Bootänderungen müssen eigene Sicherungen und
 gegebenenfalls der BitLocker-Wiederherstellungsschlüssel verfügbar sein.
 
 ## Installation und portabler Betrieb
 
-Den NSIS-Installer `BootPilot-0.1.0-windows-x64-setup.exe` ausführen. Die
+Den NSIS-Installer `BootPilot-0.1.1-windows-x64-setup.exe` ausführen. Die
 Installation für alle Benutzer verlangt UAC und verwendet Program Files. Falls
 WebView2 fehlt, lädt der Installer den Microsoft-Bootstrapper; dafür wird eine
 Internetverbindung benötigt. BootPilot selbst läuft anschließend ohne erhöhte
@@ -22,6 +22,13 @@ Programmdatei löscht weder die separat gespeicherten Sicherungen noch einen
 bereits ausdrücklich vorgenommenen Bootänderungsschritt.
 
 ## Erfassung, Vorschau und Änderungen
+
+Die Sprachauswahl oben rechts wechselt zwischen Deutsch und English und merkt
+sich die Auswahl lokal. Deutsch bleibt die Standardsprache. Ein Sprachwechsel
+erhält Formulareingaben und vorbereitete Pläne; er löst keine Systemabfrage aus.
+Zeit- und Zahlenangaben folgen der gewählten Sprache. Eintragsnamen, Dateipfade,
+Konfigurationsinhalte sowie unbekannte Originalmeldungen bleiben unverändert.
+Die Übersetzungen sind im Programm enthalten und funktionieren ohne Internet.
 
 1. In „Status“ ausdrücklich aktualisieren. Ein UAC-Dialog kann für geschützte
    Lesedaten erscheinen. Bei Abbruch bleiben die betroffenen Quellen unbekannt;

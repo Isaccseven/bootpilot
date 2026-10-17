@@ -1,9 +1,20 @@
 # Prüfstand der Windows-Vorabversion
 
-Stand: 17.10.2026, Version 0.1.0. Dieser Bericht trennt automatisierte
+Stand: 17.10.2026, Version 0.1.1. Dieser Bericht trennt automatisierte
 Programmprüfungen von Installation, sichtbarer Bedienung und Hardware-Boot.
 Die Vorabversion ist unsigniert. `boot_tested` bleibt ohne echten Neustarttest
 `false`.
+
+## Ergänzung für 0.1.1: Sprachen
+
+Die Oberfläche unterstützt Deutsch und Englisch mit lokal gespeicherter
+Sprachwahl. 49 Frontend-Tests prüfen unter anderem den Sprachwechsel bei
+laufenden Anfragen, den Erhalt von Entwürfen und Planbestätigungen, unveränderte
+IPC-Aufrufe und Bootdaten, verweigerten Browser-Speicher und die vollständige
+DE/EN-Katalogstruktur. TypeScript und der Produktions-Frontend-Build bestehen.
+Eine unabhängige Prüfung der i18n-Änderung ist abgeschlossen. Die unten genannten
+CI-Artefakte und Hardware-/Installationsgrenzen beziehen sich auf 0.1.0; aktuelle
+Builds sind in GitHub Actions am jeweiligen Commit erkennbar.
 
 ## Automatisierter Prüfvertrag
 

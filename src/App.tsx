@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { changeLocale, formatDate, formatNumber } from "./i18n";
+import { localizeBackendText } from "./localizeBackend";
 import { api, asBootError } from "./api";
 import type {
   ApplyReport,
@@ -11,124 +14,43 @@ import type {
   RegistrationResult,
   Snapshot,
   Source,
-  Target,
 } from "./types";
 import "./styles.css";
 
 type View = "overview" | "menu" | "backups" | "codex";
-const views: {
-  id: View;
-  label: string;
-  icon: string;
-  title: string;
-  subtitle: string;
-}[] = [
-  {
-    id: "overview",
-    label: "Übersicht",
-    icon: "◫",
-    title: "Dein System im Blick.",
-    subtitle:
-      "Vorhandene Startoptionen und der Stand deiner Bootkonfiguration.",
-  },
-  {
-    id: "menu",
-    label: "Bootmenü",
-    icon: "☷",
-    title: "Der nächste Start beginnt hier.",
-    subtitle: "Änderungen vorbereiten, genau prüfen und anschließend anwenden.",
-  },
-  {
-    id: "backups",
-    label: "Sicherungen",
-    icon: "↶",
-    title: "Jede Änderung nachvollziehbar.",
-    subtitle:
-      "Gesicherte Ziele, verifizierte Schritte und gezielte Wiederherstellung.",
-  },
-  {
-    id: "codex",
-    label: "Codex",
-    icon: "⌘",
-    title: "Dein Bootmenü. Mit Codex.",
-    subtitle: "Dieselben geprüften Funktionen, direkt aus deinem Codex-Chat.",
-  },
+const views: { id: View; icon: string }[] = [
+  { id: "overview", icon: "◫" },
+  { id: "menu", icon: "☷" },
+  { id: "backups", icon: "↶" },
+  { id: "codex", icon: "⌘" },
 ];
-const sourceNames: Record<Source, string> = {
-  firmware: "Firmware",
-  bcd: "Windows BCD",
-  boot_current: "Aktueller Start",
-  secure_boot: "Secure Boot",
-  bitlocker: "BitLocker",
-  grub: "GRUB",
-  linux: "Linux-Erkennung",
-  volumes: "Volumes",
-};
-const targetNames: Record<Target, string> = {
-  firmware_order: "UEFI-Bootreihenfolge",
-  grub_main: "GRUB-Hauptkonfiguration",
-  grub_user: "GRUB-Benutzersektion",
-};
-const stateNames = {
-  complete: "Vollständig",
-  partial: "Unvollständig",
-  unavailable: "Nicht verfügbar",
-  unknown: "Unbekannt",
-};
-const kindNames = {
-  windows: "Windows",
-  linux: "Installiertes Linux",
-  installer: "Installer / Live-System",
-  other: "Weiterer Eintrag",
-};
-const outcomeNames = {
-  applied: "Konfiguration geprüft",
-  partial: "Teilweise ausgeführt",
-  rolled_back: "Änderung zurückgenommen",
-};
-const phaseNames = {
-  intent: "Vorbereitet",
-  written: "Geschrieben",
-  not_written: "Nicht geschrieben",
-  write_uncertain: "Schreibausgang ungewiss",
-  verified: "Geprüft",
-  rollback_intent: "Rücknahme vorbereitet",
-  rolled_back: "Zurückgenommen",
-  failed: "Fehlgeschlagen",
-};
-function date(value: string) {
-  const stamp = new Date(value);
-  return Number.isFinite(stamp.getTime())
-    ? stamp.toLocaleString("de-DE", {
-        dateStyle: "medium",
-        timeStyle: "medium",
-      })
-    : "Zeitpunkt unbekannt";
-}
-function requestName(request: PlanRequest) {
-  return {
-    order: "Bootreihenfolge",
-    menu: "Standard & Wartezeit",
-    cachyos: "CachyOS-Eintrag",
-    restore: "Gezielte Wiederherstellung",
-  }[request.kind];
-}
+const sources: Source[] = [
+  "firmware",
+  "bcd",
+  "boot_current",
+  "secure_boot",
+  "bitlocker",
+  "grub",
+  "linux",
+  "volumes",
+];
 
 function ErrorNotice({ error }: { error: BootError }) {
+  const { t } = useTranslation();
   return (
     <div className="notice danger" role="alert">
-      <strong>{error.message}</strong>
+      <strong>{localizeBackendText(error.message)}</strong>
       {error.details != null && (
         <details>
-          <summary>Details anzeigen</summary>
+          <summary>{t("error.details")}</summary>
           <pre>
             {typeof error.details === "string"
-              ? error.details
+              ? localizeBackendText(error.details)
               : JSON.stringify(error.details, null, 2)}
           </pre>
         </details>
       )}
-      <small>Fehlercode: {error.code}</small>
+      <small>{t("error.code", { code: error.code })}</small>
     </div>
   );
 }
@@ -148,65 +70,63 @@ function Empty({
   );
 }
 function Report({ report }: { report: ApplyReport }) {
+  const { t } = useTranslation();
   return (
     <section
       className={`panel result ${report.outcome === "partial" ? "warning-border" : ""}`}
-      aria-label="Änderungsergebnis"
+      aria-label={t("report.label")}
     >
       <div className="section-heading">
         <div>
-          <p className="eyebrow">ERGEBNIS</p>
-          <h2>{outcomeNames[report.outcome]}</h2>
+          <p className="eyebrow">{t("report.eyebrow")}</p>
+          <h2>{t(`outcomes.${report.outcome}`)}</h2>
         </div>
         <span className="badge">
-          {report.boot_tested ? "Boot getestet" : "Boot nicht getestet"}
+          {report.boot_tested ? t("report.bootTested") : t("report.bootUntested")}
         </span>
       </div>
       <p>
         {report.outcome === "applied"
-          ? "Die angegebenen Konfigurationsschritte wurden nach dem Schreiben verifiziert."
+          ? t("report.applied")
           : report.outcome === "partial"
-            ? "Es verbleiben Abweichungen. Prüfe das Protokoll und die zugehörige Sicherung."
-            : "Die betroffenen Ziele wurden zurückgenommen. Einzelheiten stehen im Protokoll."}
+            ? t("report.partial")
+            : t("report.rolledBack")}
       </p>
       <dl className="metadata">
         <div>
-          <dt>Plan</dt>
+          <dt>{t("common.plan")}</dt>
           <dd>{report.plan_id}</dd>
         </div>
         <div>
-          <dt>Sicherung</dt>
-          <dd>{report.backup_id ?? "Keine Sicherung gemeldet"}</dd>
+          <dt>{t("common.backup")}</dt>
+          <dd>{report.backup_id ?? t("report.noBackup")}</dd>
         </div>
       </dl>
       {report.verified_steps.length > 0 && (
         <ul className="plain-list">
           {report.verified_steps.map((step) => (
             <li key={`${step.sequence}-${step.phase}`}>
-              {targetNames[step.target]} · {phaseNames[step.phase]}
-              {step.detail && ` · ${step.detail}`}
+              {t(`targets.${step.target}`)} · {t(`phases.${step.phase}`)}
+              {step.detail && ` · ${localizeBackendText(step.detail)}`}
             </li>
           ))}
         </ul>
       )}
       {report.remaining_deviations.length > 0 && (
         <div className="notice warning">
-          <h3>Verbleibende Abweichungen</h3>
+          <h3>{t("report.deviations")}</h3>
           <ul>
             {report.remaining_deviations.map((deviation, i) => (
               <li key={i}>
-                <strong>{targetNames[deviation.target]}:</strong>{" "}
-                {deviation.description}
+                <strong>{t(`targets.${deviation.target}`)}:</strong>{" "}
+                {localizeBackendText(deviation.description)}
               </li>
             ))}
           </ul>
         </div>
       )}
       {!report.boot_tested && (
-        <p className="muted">
-          Ein erfolgreicher Start lässt sich erst durch einen separat
-          durchgeführten Boot-Test bestätigen.
-        </p>
+        <p className="muted">{t("report.bootTestExplanation")}</p>
       )}
     </section>
   );
@@ -225,6 +145,7 @@ function Preview({
   onApply: () => void;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   const [checked, setChecked] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -236,44 +157,41 @@ function Preview({
   const unavailable =
     blocked || expired || plan.state !== "ready" || plan.diffs.length === 0;
   return (
-    <section className="panel preview" aria-label="Änderungsvorschau">
+    <section className="panel preview" aria-label={t("preview.label")}>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">VOR DEM ANWENDEN</p>
-          <h2>Änderungsvorschau</h2>
+          <p className="eyebrow">{t("preview.eyebrow")}</p>
+          <h2>{t("preview.label")}</h2>
         </div>
-        <span className="badge blue">{requestName(plan.request)}</span>
+        <span className="badge blue">{t(`requests.${plan.request.kind}`)}</span>
       </div>
-      <p>
-        Prüfe alle betroffenen Ziele. Vor dem Schreiben erstellt BootPilot eine
-        Sicherung und prüft, ob der Ausgangszustand noch übereinstimmt.
-      </p>
+      <p>{t("preview.explanation")}</p>
       <dl className="metadata">
         <div>
-          <dt>Plan-ID</dt>
+          <dt>{t("preview.planId")}</dt>
           <dd>{plan.id}</dd>
         </div>
         <div>
-          <dt>Gültig bis</dt>
-          <dd>{date(plan.expires_at)}</dd>
+          <dt>{t("preview.expires")}</dt>
+          <dd>{formatDate(plan.expires_at)}</dd>
         </div>
         <div>
-          <dt>Erfassung</dt>
+          <dt>{t("preview.snapshot")}</dt>
           <dd>{plan.snapshot_id}</dd>
         </div>
       </dl>
       {plan.diffs.map((diff, index) => (
         <article className="diff" key={`${diff.target}-${index}`}>
-          <h3>{targetNames[diff.target]}</h3>
-          <p>{diff.description}</p>
+          <h3>{t(`targets.${diff.target}`)}</h3>
+          <p>{localizeBackendText(diff.description)}</p>
           <div className="diff-grid">
             <div>
-              <h4>Vorher</h4>
-              <pre>{diff.before || "(leer)"}</pre>
+              <h4>{t("preview.before")}</h4>
+              <pre>{diff.before || t("preview.empty")}</pre>
             </div>
             <div>
-              <h4>Nachher</h4>
-              <pre>{diff.after || "(leer)"}</pre>
+              <h4>{t("preview.after")}</h4>
+              <pre>{diff.after || t("preview.empty")}</pre>
             </div>
           </div>
         </article>
@@ -281,37 +199,30 @@ function Preview({
       {plan.preconditions.length > 0 && (
         <details className="checksums">
           <summary>
-            Geprüfte Vorbedingungen ({plan.preconditions.length})
+            {t("preview.preconditions", {
+              count: plan.preconditions.length,
+              total: formatNumber(plan.preconditions.length),
+            })}
           </summary>
           {plan.preconditions.map((condition) => (
             <p key={condition.target}>
-              {targetNames[condition.target]}
+              {t(`targets.${condition.target}`)}
               <code>{condition.expected_checksum}</code>
             </p>
           ))}
         </details>
       )}
       {expired && (
-        <p className="notice warning" role="status">
-          Plan abgelaufen. Erstelle eine neue Vorschau.
-        </p>
+        <p className="notice warning" role="status">{t("preview.expired")}</p>
       )}
       {blocked && (
-        <p className="notice warning">
-          Es liegt keine aktuelle Erfassung vor. Aktualisiere und erstelle eine
-          neue Vorschau.
-        </p>
+        <p className="notice warning">{t("preview.noCurrentSnapshot")}</p>
       )}
       {plan.state !== "ready" && (
-        <p className="notice warning">
-          Dieser Plan wurde bereits begonnen oder abgeschlossen.
-        </p>
+        <p className="notice warning">{t("preview.started")}</p>
       )}
       {plan.diffs.length === 0 && (
-        <p className="notice warning">
-          Dieser Plan enthält keine sichtbaren Änderungen und kann hier nicht
-          angewendet werden.
-        </p>
+        <p className="notice warning">{t("preview.noChanges")}</p>
       )}
       <label className="confirmation">
         <input
@@ -320,7 +231,7 @@ function Preview({
           disabled={unavailable || busy}
           onChange={(event) => setChecked(event.target.checked)}
         />
-        Vorschau geprüft – diese Änderungen anwenden
+        {t("preview.confirmation")}
       </label>
       <div className="actions">
         <button
@@ -328,12 +239,10 @@ function Preview({
           disabled={!checked || unavailable || busy}
           onClick={onApply}
         >
-          {busy ? "Wird angewendet …" : "Änderungen anwenden"}
+          {busy ? t("preview.applying") : t("preview.apply")}
         </button>
-        <button disabled={busy} onClick={onDismiss}>
-          Vorschau verwerfen
-        </button>
-        <span className="muted">Kann eine Administratorabfrage öffnen.</span>
+        <button disabled={busy} onClick={onDismiss}>{t("preview.dismiss")}</button>
+        <span className="muted">{t("preview.adminPrompt")}</span>
       </div>
     </section>
   );
@@ -350,6 +259,7 @@ function Overview({
   onDiagnose: () => void;
   busy: boolean;
 }) {
+  const { t } = useTranslation();
   const current = snapshot.boot_current;
   return (
     <>
@@ -357,45 +267,53 @@ function Overview({
         <section
           className="panel summary-card"
           role="group"
-          aria-label="Secure Boot"
+          aria-label={t("common.secureBoot")}
         >
           <span className="small-icon">◇</span>
-          <h2>Secure Boot</h2>
+          <h2>{t("common.secureBoot")}</h2>
           <strong>
             {snapshot.secure_boot === null
-              ? "Unbekannt"
+              ? t("common.unknown")
               : snapshot.secure_boot
-                ? "Aktiviert"
-                : "Deaktiviert"}
+                ? t("overview.enabled")
+                : t("overview.disabled")}
           </strong>
-          <p>Quelle: {stateNames[snapshot.sources.secure_boot]}</p>
+          <p>
+            {t("overview.source", {
+              state: t(`states.${snapshot.sources.secure_boot}`),
+            })}
+          </p>
         </section>
         <section
           className="panel summary-card"
           role="group"
-          aria-label="BitLocker"
+          aria-label={t("common.bitlocker")}
         >
           <span className="small-icon">▣</span>
-          <h2>BitLocker</h2>
+          <h2>{t("common.bitlocker")}</h2>
           <strong>
             {snapshot.bitlocker === null
-              ? "Unbekannt"
+              ? t("common.unknown")
               : snapshot.bitlocker
-                ? "Schutz aktiviert"
-                : "Schutz deaktiviert"}
+                ? t("overview.protectionEnabled")
+                : t("overview.protectionDisabled")}
           </strong>
-          <p>Windows-Systemvolume · {stateNames[snapshot.sources.bitlocker]}</p>
+          <p>
+            {t("overview.systemVolume", {
+              state: t(`states.${snapshot.sources.bitlocker}`),
+            })}
+          </p>
         </section>
         <section className="panel summary-card">
           <span className="small-icon">↗</span>
-          <h2>Aktueller Firmware-Start</h2>
+          <h2>{t("overview.currentBoot")}</h2>
           <strong>
             {current
               ? `Boot${current.uefi_number.toString(16).toUpperCase().padStart(4, "0")}`
-              : "Unbekannt"}
+              : t("common.unknown")}
           </strong>
           <p>
-            {current?.description ?? "Keine bestätigte Zuordnung verfügbar"}
+            {current?.description ?? t("overview.noBootMapping")}
           </p>
         </section>
       </div>
@@ -403,11 +321,11 @@ function Overview({
         <section className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">UEFI</p>
-              <h2>Bootreihenfolge</h2>
+              <p className="eyebrow">{t("common.uefi")}</p>
+              <h2>{t("overview.bootOrder")}</h2>
             </div>
             <span className="badge">
-              {stateNames[snapshot.sources.firmware]}
+              {t(`states.${snapshot.sources.firmware}`)}
             </span>
           </div>
           {snapshot.firmware_order.length ? (
@@ -418,10 +336,10 @@ function Overview({
                 );
                 return (
                   <li key={id}>
-                    <span className="entry-number">{index + 1}</span>
+                    <span className="entry-number">{formatNumber(index + 1)}</span>
                     <div>
                       <strong>
-                        {entry?.title ?? "Unbekannter Firmware-Eintrag"}
+                        {entry?.title ?? t("overview.unknownFirmware")}
                       </strong>
                       <small>{entry?.loader_path ?? id}</small>
                     </div>
@@ -430,22 +348,21 @@ function Overview({
               })}
             </ol>
           ) : (
-            <Empty title="Keine verifizierte Reihenfolge">
-              Ein leerer Befund bestätigt keine fehlenden Betriebssysteme.
-            </Empty>
+            <Empty title={t("overview.noOrder")}>{t("overview.emptyNotEvidence")}</Empty>
           )}
           {snapshot.boot_next !== null && (
             <p className="notice info">
-              Einmaliger nächster Start: Boot
-              {snapshot.boot_next.toString(16).toUpperCase().padStart(4, "0")}
+              {t("overview.nextBoot", {
+                boot: `Boot${snapshot.boot_next.toString(16).toUpperCase().padStart(4, "0")}`,
+              })}
             </p>
           )}
         </section>
         <section className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">GRUB</p>
-              <h2>Erkannte Menüeinträge</h2>
+              <p className="eyebrow">{t("common.grub")}</p>
+              <h2>{t("overview.menuEntries")}</h2>
             </div>
           </div>
           {snapshot.grub?.entries.length ? (
@@ -461,54 +378,47 @@ function Overview({
                   </span>
                   <div>
                     <strong>{entry.title}</strong>
-                    <small>{kindNames[entry.kind]}</small>
+                    <small>{t(`kinds.${entry.kind}`)}</small>
                   </div>
                   {snapshot.grub?.default_entry_id === entry.id && (
-                    <span className="badge">Standard</span>
+                    <span className="badge">{t("overview.default")}</span>
                   )}
                 </li>
               ))}
             </ul>
           ) : (
-            <Empty title="GRUB-Menü nicht verfügbar">
-              Erst eine vollständige Erfassung ermöglicht eine sichere Aussage.
-            </Empty>
+            <Empty title={t("overview.noGrubMenu")}>{t("overview.completeScanNeeded")}</Empty>
           )}
           {!snapshot.linux_candidates.some(
             (candidate) => candidate.validated,
           ) && (
-            <p className="muted">
-              Keine validierte Linux-Installation für einen direkten neuen
-              Eintrag erkannt. Installer sind keine installierten Linux-Systeme.
-            </p>
+            <p className="muted">{t("overview.noValidatedLinux")}</p>
           )}
         </section>
       </div>
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">DATENQUALITÄT</p>
-            <h2>Erfassung & offene Prüfungen</h2>
+            <p className="eyebrow">{t("overview.quality")}</p>
+            <h2>{t("overview.scanChecks")}</h2>
           </div>
-          <button onClick={onDiagnose} disabled={busy}>
-            Diagnose anzeigen
-          </button>
+          <button onClick={onDiagnose} disabled={busy}>{t("overview.diagnose")}</button>
         </div>
         <div className="source-grid">
-          {(Object.keys(sourceNames) as Source[]).map((source) => (
+          {sources.map((source) => (
             <div key={source}>
-              <span>{sourceNames[source]}</span>
+              <span>{t(`sources.${source}`)}</span>
               <span
                 className={`state ${snapshot.sources[source] === "complete" ? "complete" : ""}`}
               >
-                {stateNames[snapshot.sources[source]]}
+                {t(`states.${snapshot.sources[source]}`)}
               </span>
             </div>
           ))}
         </div>
         {snapshot.source_errors.map((item, i) => (
           <div className="source-error" key={i}>
-            <strong>{sourceNames[item.source]}</strong>
+            <strong>{t(`sources.${item.source}`)}</strong>
             <ErrorNotice error={item.error} />
           </div>
         ))}
@@ -518,18 +428,22 @@ function Overview({
               {findings.map((finding, i) => (
                 <li key={`${finding.code}-${i}`}>
                   <span className="badge">
-                    {finding.certainty === "evidence" ? "Belegt" : "Hypothese"}
+                    {finding.certainty === "evidence" ? t("overview.evidence") : t("overview.hypothesis")}
                   </span>
-                  <strong>{finding.statement}</strong>
+                  <strong>{localizeBackendText(finding.statement)}</strong>
                   {finding.open_check && (
-                    <p>Offene Prüfung: {finding.open_check}</p>
+                    <p>
+                      {t("overview.openCheck", {
+                        check: localizeBackendText(finding.open_check),
+                      })}
+                    </p>
                   )}
                   {finding.evidence.length > 0 && (
                     <small>
                       {finding.evidence
                         .map(
                           (evidence) =>
-                            `${sourceNames[evidence.source]}: ${evidence.reference}`,
+                            `${t(`sources.${evidence.source}`)}: ${evidence.reference}`,
                         )
                         .join(" · ")}
                     </small>
@@ -538,29 +452,32 @@ function Overview({
               ))}
             </ul>
           ) : (
-            <p className="muted">
-              Die Diagnose meldet keine zusätzlichen Befunde. Dies bestätigt
-              keinen erfolgreichen Boot-Test.
-            </p>
+            <p className="muted">{t("overview.noFindings")}</p>
           ))}
       </section>
       {(snapshot.loader_info ||
         snapshot.loader_entry_selected ||
         snapshot.volumes.length > 0) && (
         <details className="panel technical">
-          <summary>Weitere erfasste Systemdaten</summary>
-          {snapshot.loader_info && <p>Loader: {snapshot.loader_info}</p>}
+          <summary>{t("overview.systemData")}</summary>
+          {snapshot.loader_info && (
+            <p>{t("overview.loader", { loader: snapshot.loader_info })}</p>
+          )}
           {snapshot.loader_entry_selected && (
-            <p>Ausgewählter Loader-Eintrag: {snapshot.loader_entry_selected}</p>
+            <p>
+              {t("overview.selectedLoader", {
+                entry: snapshot.loader_entry_selected,
+              })}
+            </p>
           )}
           {snapshot.volumes.map((volume, i) => (
             <p key={volume.volume_id ?? i}>
               {volume.paths.join(", ") ||
                 volume.volume_id ||
-                "Volume ohne Zuordnung"}{" "}
-              · {volume.filesystem ?? "Dateisystem unbekannt"}
+                t("overview.unmappedVolume")}{" "}
+              · {volume.filesystem ?? t("overview.unknownFilesystem")}
               {volume.size_bytes !== null &&
-                ` · ${(volume.size_bytes / 1024 ** 3).toLocaleString("de-DE", { maximumFractionDigits: 1 })} GiB`}
+                ` · ${formatNumber(volume.size_bytes / 1024 ** 3)} GiB`}
             </p>
           ))}
         </details>
@@ -582,6 +499,7 @@ function BootMenu({
   onPrepare: (request: PlanRequest) => void;
   invalidate: () => void;
 }) {
+  const { t } = useTranslation();
   const [defaultId, setDefaultId] = useState(
     snapshot.grub?.default_entry_id ?? "",
   );
@@ -613,13 +531,13 @@ function BootMenu({
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">GRUB-BOOTMENÜ</p>
-            <h2>Standard & Wartezeit</h2>
+            <p className="eyebrow">{t("menu.eyebrow")}</p>
+            <h2>{t("menu.defaultTimeout")}</h2>
           </div>
           <span className="badge">
             {grub?.write_supported
-              ? "Unterstützte Konfiguration"
-              : "Nur lesbar"}
+              ? t("menu.supported")
+              : t("menu.readOnly")}
           </span>
         </div>
         {grub ? (
@@ -635,7 +553,7 @@ function BootMenu({
           >
             <div className="form-grid">
               <label>
-                Standard-Eintrag
+                {t("menu.defaultEntry")}
                 <select
                   value={defaultId}
                   onChange={(event) => {
@@ -644,18 +562,16 @@ function BootMenu({
                   }}
                   disabled={!canMenu}
                 >
-                  <option value="" disabled>
-                    Eintrag wählen
-                  </option>
+                  <option value="" disabled>{t("menu.selectEntry")}</option>
                   {grub.entries.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      {entry.title} · {kindNames[entry.kind]}
+                      {entry.title} · {t(`kinds.${entry.kind}`)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                Wartezeit in Sekunden
+                {t("menu.timeout")}
                 <input
                   type="number"
                   min="1"
@@ -673,8 +589,9 @@ function BootMenu({
             </div>
             {!grub.write_supported && (
               <p className="notice warning">
-                {grub.write_block_reason ??
-                  "Diese GRUB-Konfiguration wird zum Schreiben nicht unterstützt."}
+                {grub.write_block_reason
+                  ? localizeBackendText(grub.write_block_reason)
+                  : t("menu.unsupported")}
               </p>
             )}
             <button
@@ -688,25 +605,21 @@ function BootMenu({
                 Number(timeout) > 300
               }
             >
-              Menüvorschau erstellen
+              {t("menu.preview")}
             </button>
           </form>
         ) : (
-          <Empty title="Keine GRUB-Konfiguration verfügbar">
-            Aktualisiere die Erfassung, um unterstützte Einstellungen zu sehen.
-          </Empty>
+          <Empty title={t("menu.noGrub")}>{t("menu.refreshHelp")}</Empty>
         )}
       </section>
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">FIRMWARE</p>
-            <h2>UEFI-Bootreihenfolge</h2>
+            <p className="eyebrow">{t("menu.firmware")}</p>
+            <h2>{t("menu.firmwareOrder")}</h2>
           </div>
         </div>
-        <p className="muted">
-          Die Reihenfolge ist unabhängig von der Standardauswahl im GRUB-Menü.
-        </p>
+        <p className="muted">{t("menu.orderExplanation")}</p>
         {order.length ? (
           <>
             <ol className="entry-list reorder">
@@ -716,18 +629,18 @@ function BootMenu({
                     ?.title ?? id;
                 return (
                   <li key={id}>
-                    <span className="entry-number">{index + 1}</span>
+                    <span className="entry-number">{formatNumber(index + 1)}</span>
                     <strong>{name}</strong>
                     <div className="move-buttons">
                       <button
-                        aria-label={`${name} nach oben`}
+                        aria-label={t("menu.moveUp", { name })}
                         disabled={!canOrder || index === 0}
                         onClick={() => move(index, -1)}
                       >
                         ↑
                       </button>
                       <button
-                        aria-label={`${name} nach unten`}
+                        aria-label={t("menu.moveDown", { name })}
                         disabled={!canOrder || index === order.length - 1}
                         onClick={() => move(index, 1)}
                       >
@@ -742,23 +655,21 @@ function BootMenu({
               disabled={!canOrder}
               onClick={() => onPrepare({ kind: "order", entry_ids: order })}
             >
-              Reihenfolge als Vorschau
+              {t("menu.previewOrder")}
             </button>
           </>
         ) : (
-          <Empty title="Reihenfolge nicht verfügbar" />
+          <Empty title={t("menu.orderUnavailable")} />
         )}
         {!canOrder && !busy && (
-          <p className="muted">
-            Eine vollständige aktuelle Firmware-Erfassung ist erforderlich.
-          </p>
+          <p className="muted">{t("menu.completeFirmwareNeeded")}</p>
         )}
       </section>
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">VALIDIERTE INSTALLATION</p>
-            <h2>CachyOS direkt hinzufügen</h2>
+            <p className="eyebrow">{t("menu.validatedInstallation")}</p>
+            <h2>{t("menu.addCachyos")}</h2>
           </div>
         </div>
         {candidates.length ? (
@@ -774,7 +685,7 @@ function BootMenu({
           >
             <div className="form-grid">
               <label>
-                Erkannte Installation
+                {t("menu.detectedInstallation")}
                 <select
                   value={candidateId}
                   disabled={blocked || busy}
@@ -791,7 +702,7 @@ function BootMenu({
                 </select>
               </label>
               <label>
-                Menütitel
+                {t("menu.title")}
                 <input
                   maxLength={120}
                   value={title}
@@ -808,8 +719,8 @@ function BootMenu({
               .filter((candidate) => candidate.id === candidateId)
               .map((candidate) => (
                 <p key={candidate.id} className="muted">
-                  Geprüfter Kernel: <code>{candidate.kernel_path}</code> ·
-                  Dateisystem: <code>{candidate.filesystem_uuid}</code>
+                  {t("menu.checkedKernel")} <code>{candidate.kernel_path}</code> ·{" "}
+                  {t("menu.filesystem")} <code>{candidate.filesystem_uuid}</code>
                 </p>
               ))}
             <button
@@ -820,14 +731,11 @@ function BootMenu({
               }
               type="submit"
             >
-              CachyOS-Vorschau erstellen
+              {t("menu.previewCachyos")}
             </button>
           </form>
         ) : (
-          <Empty title="Keine validierte Installation verfügbar">
-            Ein vorhandener ISO- oder Live-Installer wird nicht als installierte
-            Linux-Installation verwendet.
-          </Empty>
+          <Empty title={t("menu.noInstallation")}>{t("menu.noInstallerUse")}</Empty>
         )}
       </section>
     </>
@@ -845,76 +753,65 @@ function Backups({
   onReload: () => void;
   onRestore: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">ÄNDERUNGSPROTOKOLL</p>
-          <h2>Deine Sicherungen</h2>
+          <p className="eyebrow">{t("backups.eyebrow")}</p>
+          <h2>{t("backups.title")}</h2>
         </div>
-        <button onClick={onReload} disabled={busy}>
-          Sicherungen neu laden
-        </button>
+        <button onClick={onReload} disabled={busy}>{t("backups.reload")}</button>
       </div>
-      <p className="muted">
-        Eine Wiederherstellung wird zuerst als konkreter Plan geprüft. Sie
-        betrifft nur die Ziele dieser eigenen Änderung.
-      </p>
+      <p className="muted">{t("backups.explanation")}</p>
       {backups === null ? (
         <p role="status">
           {busy
-            ? "Sicherungen werden geladen …"
-            : "Sicherungen sind noch nicht geladen. Wähle „Sicherungen neu laden“."}
+            ? t("backups.loading")
+            : t("backups.notLoaded")}
         </p>
       ) : backups.length === 0 ? (
-        <Empty title="Noch keine Sicherungen vorhanden">
-          Sobald eine Änderung beginnt, erscheint ihre Sicherung mit dem
-          Protokoll hier.
-        </Empty>
+        <Empty title={t("backups.emptyTitle")}>{t("backups.emptyHelp")}</Empty>
       ) : (
         <div className="backup-list">
           {backups.map((backup) => (
             <article key={backup.id} className="backup">
               <div className="section-heading">
                 <div>
-                  <h3>{requestName(backup.request)}</h3>
-                  <p>{date(backup.created_at)}</p>
+                  <h3>{t(`requests.${backup.request.kind}`)}</h3>
+                  <p>{formatDate(backup.created_at)}</p>
                 </div>
                 <span
                   className={`badge ${backup.outcome === null ? "amber" : ""}`}
                 >
                   {backup.outcome
-                    ? outcomeNames[backup.outcome.outcome]
-                    : "Unvollständiges Journal"}
+                    ? t(`outcomes.${backup.outcome.outcome}`)
+                    : t("backups.incomplete")}
                 </span>
               </div>
               <dl className="metadata">
                 <div>
-                  <dt>Sicherungs-ID</dt>
+                  <dt>{t("backups.id")}</dt>
                   <dd>{backup.id}</dd>
                 </div>
                 <div>
-                  <dt>Plan</dt>
+                  <dt>{t("common.plan")}</dt>
                   <dd>{backup.plan_id}</dd>
                 </div>
               </dl>
               {backup.outcome === null && (
-                <p className="notice warning">
-                  Diese Änderung wurde noch nicht als abgeschlossen
-                  protokolliert. Der Zustand muss vor der Wiederherstellung
-                  geprüft werden.
-                </p>
+                <p className="notice warning">{t("backups.incompleteHelp")}</p>
               )}
               <details>
-                <summary>Gesicherte Ziele & Protokoll</summary>
+                <summary>{t("backups.targetsJournal")}</summary>
                 {backup.targets.map((target) => (
                   <div className="backup-target" key={target.target}>
-                    <strong>{targetNames[target.target]}</strong>
+                    <strong>{t(`targets.${target.target}`)}</strong>
                     <p>
-                      Original: <code>{target.original_checksum}</code>
+                      {t("backups.original")} <code>{target.original_checksum}</code>
                     </p>
                     <p>
-                      Angewendet: <code>{target.applied_checksum}</code>
+                      {t("backups.applied")} <code>{target.applied_checksum}</code>
                     </p>
                   </div>
                 ))}
@@ -922,26 +819,22 @@ function Backups({
                   <ol>
                     {backup.journal.map((step) => (
                       <li key={`${step.sequence}-${step.phase}`}>
-                        {date(step.at)} · {targetNames[step.target]} ·{" "}
-                        {phaseNames[step.phase]}
-                        {step.detail && ` · ${step.detail}`}
+                        {formatDate(step.at)} · {t(`targets.${step.target}`)} ·{" "}
+                        {t(`phases.${step.phase}`)}
+                        {step.detail && ` · ${localizeBackendText(step.detail)}`}
                       </li>
                     ))}
                   </ol>
                 ) : (
-                  <p className="muted">
-                    Keine verifizierten Schritte protokolliert.
-                  </p>
+                  <p className="muted">{t("backups.noSteps")}</p>
                 )}
               </details>
               {backup.outcome?.remaining_deviations.map((item, i) => (
                 <p key={i} className="notice warning">
-                  {targetNames[item.target]}: {item.description}
+                  {t(`targets.${item.target}`)}: {localizeBackendText(item.description)}
                 </p>
               ))}
-              <button disabled={busy} onClick={() => onRestore(backup.id)}>
-                Wiederherstellung als Vorschau
-              </button>
+              <button disabled={busy} onClick={() => onRestore(backup.id)}>{t("backups.restore")}</button>
             </article>
           ))}
         </div>
@@ -963,17 +856,16 @@ function Codex({
   onRegister: () => void;
   onReload: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">LOKALE MCP-ANBINDUNG</p>
-            <h2>BootPilot in Codex</h2>
+            <p className="eyebrow">{t("codex.eyebrow")}</p>
+            <h2>{t("codex.title")}</h2>
           </div>
-          <button disabled={busy} onClick={onReload}>
-            Status prüfen
-          </button>
+          <button disabled={busy} onClick={onReload}>{t("codex.check")}</button>
         </div>
         {status ? (
           <>
@@ -982,31 +874,31 @@ function Codex({
                 <span className="status-dot" />
                 <strong>
                   {status.configured
-                    ? "Eingerichtet"
-                    : "Noch nicht eingerichtet"}
+                    ? t("codex.configured")
+                    : t("codex.notConfigured")}
                 </strong>
               </div>
               <span
                 className={`badge ${status.connection_verified ? "blue" : ""}`}
               >
                 {status.connection_verified
-                  ? "Verbindung gemessen und bestätigt"
-                  : "Verbindung nicht bestätigt"}
+                  ? t("codex.connected")
+                  : t("codex.notConnected")}
               </span>
             </div>
             <dl className="metadata">
               <div>
-                <dt>MCP-Server</dt>
-                <dd>{status.mcp_path ?? "Kein Pfad eingerichtet"}</dd>
+                <dt>{t("codex.server")}</dt>
+                <dd>{status.mcp_path ?? t("codex.noPath")}</dd>
               </div>
             </dl>
-            <p className="muted">{status.details}</p>
+            <p className="muted">{localizeBackendText(status.details)}</p>
           </>
         ) : (
           <p role="status">
             {busy
-              ? "Verbindungsstatus wird geladen …"
-              : "Verbindungsstatus nicht verfügbar. Wähle „Status prüfen“."}
+              ? t("codex.loading")
+              : t("codex.unavailable")}
           </p>
         )}
         <button
@@ -1015,49 +907,41 @@ function Codex({
           onClick={onRegister}
         >
           {status?.configured
-            ? "Codex-Einrichtung erneut prüfen"
-            : "Für Codex einrichten"}
+            ? t("codex.recheckSetup")
+            : t("codex.setup")}
         </button>
-        <p className="muted">
-          Die Einrichtung sichert die Codex-Konfiguration und erhält vorhandene
-          MCP-Server. Ein zusätzlicher API-Schlüssel ist nicht nötig.
-        </p>
+        <p className="muted">{t("codex.setupHelp")}</p>
         {result && (
           <div className="notice info" role="status">
-            <strong>Einrichtung gespeichert</strong>
+            <strong>{t("codex.saved")}</strong>
             <p>
-              Konfiguration: <code>{result.config_path}</code>
+              {t("codex.configuration")} <code>{result.config_path}</code>
             </p>
             <p>
-              Sicherung: <code>{result.backup_path}</code>
+              {t("codex.backup")} <code>{result.backup_path}</code>
             </p>
             {result.restart_required && (
-              <p>
-                Starte Codex vollständig neu. Erst ein gemessener
-                Verbindungstest bestätigt die Verbindung.
-              </p>
+              <p>{t("codex.restart")}</p>
             )}
           </div>
         )}
       </section>
       <section className="panel">
-        <p className="eyebrow">BEISPIELE FÜR DEINEN CHAT</p>
-        <h2>Ein Auftrag genügt.</h2>
+        <p className="eyebrow">{t("codex.examplesEyebrow")}</p>
+        <h2>{t("codex.examplesTitle")}</h2>
         <ul className="examples">
-          <li>„Zeige meine Bootoptionen und offene Prüfungen.“</li>
-          <li>„Bereite CachyOS als Standard vor.“</li>
-          <li>„Zeige die Vorschau für die letzte Wiederherstellung.“</li>
+          <li>{t("codex.exampleStatus")}</li>
+          <li>{t("codex.exampleDefault")}</li>
+          <li>{t("codex.exampleRestore")}</li>
         </ul>
-        <p className="muted">
-          Auch in Codex erfordert jede Änderung einen geprüften Plan. BootPilot
-          startet den PC nicht automatisch neu.
-        </p>
+        <p className="muted">{t("codex.exampleHelp")}</p>
       </section>
     </>
   );
 }
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   const [view, setView] = useState<View>("overview");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1115,18 +999,18 @@ export default function App() {
     if (next !== view) invalidatePlan();
     setView(next);
     if (next === "backups" && backups === null && !busy)
-      void run("Sicherungen laden", async () =>
+      void run("busy.backups", async () =>
         setBackups(await api.listBackups()),
       );
     if (next === "codex" && integration === null && !busy)
-      void run("Codex-Status laden", async () =>
+      void run("busy.integration", async () =>
         setIntegration(await api.getIntegrationStatus()),
       );
   }
   function refresh() {
     if (busy) return;
     invalidatePlan();
-    void run("System erfassen", async () => {
+    void run("busy.scan", async () => {
       try {
         const fresh = await api.refresh();
         setSnapshot(fresh);
@@ -1141,7 +1025,7 @@ export default function App() {
   function prepare(request: PlanRequest) {
     if (busy) return;
     const generation = ++planGeneration.current;
-    void run("Vorschau vorbereiten", async () => {
+    void run("busy.prepare", async () => {
       setPlan(null);
       setReport(null);
       const prepared = await api.prepare(request);
@@ -1158,7 +1042,7 @@ export default function App() {
     )
       return;
     const concretePlan = plan;
-    void run("Änderungen anwenden", async () => {
+    void run("busy.apply", async () => {
       try {
         setReport(await api.apply(concretePlan.id));
         setStale(true);
@@ -1169,7 +1053,6 @@ export default function App() {
       }
     });
   }
-  const selectedView = views.find((item) => item.id === view)!;
   const incomplete =
     snapshot &&
     Object.values(snapshot.sources).some((state) => state !== "complete");
@@ -1195,10 +1078,10 @@ export default function App() {
             />
           </svg>
           <span>
-            BootPilot<small>STARTKLAR. MIT ÜBERBLICK.</small>
+            BootPilot<small>{t("app.tagline")}</small>
           </span>
         </div>
-        <nav aria-label="Hauptnavigation">
+        <nav aria-label={t("app.navigation")}>
           {views.map((item) => (
             <button
               key={item.id}
@@ -1207,42 +1090,56 @@ export default function App() {
               onClick={() => navigate(item.id)}
             >
               <span aria-hidden="true">{item.icon}</span>
-              {item.label}
+              {t(`views.${item.id}.label`)}
             </button>
           ))}
         </nav>
         <div className="sidebar-note">
           <span className="status-dot" />
-          <strong>Lokal auf deinem PC</strong>
+          <strong>{t("app.local")}</strong>
           <p>
-            Geprüfte Vorschau.
+            {t("app.reviewedPreview")}
             <br />
-            Nachvollziehbare Änderungen.
+            {t("app.traceableChanges")}
           </p>
-          <small>BootPilot · Version 0.1</small>
+          <small>{t("app.version")}</small>
         </div>
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <span>Deine Startkonfiguration</span>
-          <span className="local-label">
-            <span className="status-dot" />
-            Windows · lokal
-          </span>
+          <span>{t("app.configuration")}</span>
+          <div className="topbar-controls">
+            <span className="local-label">
+              <span className="status-dot" />
+              {t("app.windowsLocal")}
+            </span>
+            <label className="language-control">
+              <span>{t("language.label")}</span>
+              <select
+                value={i18n.resolvedLanguage === "en" ? "en" : "de"}
+                onChange={(event) => changeLocale(event.target.value)}
+              >
+                <option value="de">{t("language.de")}</option>
+                <option value="en">{t("language.en")}</option>
+              </select>
+            </label>
+          </div>
         </header>
         <main id="main-content">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">{selectedView.label.toUpperCase()}</p>
-              <h1>{selectedView.title}</h1>
-              <p>{selectedView.subtitle}</p>
+              <p className="eyebrow">
+                {t(`views.${view}.label`).toLocaleUpperCase(i18n.resolvedLanguage)}
+              </p>
+              <h1>{t(`views.${view}.title`)}</h1>
+              <p>{t(`views.${view}.subtitle`)}</p>
             </div>
             <button
               className="refresh"
               disabled={!!busy || loading}
               onClick={refresh}
             >
-              <span aria-hidden="true">↻</span>Aktualisieren
+              <span aria-hidden="true">↻</span>{t("app.refresh")}
             </button>
           </div>
           <div className="snapshot-bar">
@@ -1251,40 +1148,35 @@ export default function App() {
             />
             <span>
               {loading
-                ? "Gespeicherten Status laden …"
+                ? t("snapshot.loading")
                 : snapshot
-                  ? `${stale ? "Veraltet · " : ""}Letzte Erfassung: ${date(snapshot.captured_at)}`
-                  : "Noch keine Systemerfassung vorhanden"}
+                  ? t(stale ? "snapshot.staleCaptured" : "snapshot.captured", {
+                      date: formatDate(snapshot.captured_at),
+                    })
+                  : t("snapshot.none")}
             </span>
             {snapshot && (
               <span className="badge">
-                {incomplete ? "Teilweise erfasst" : "Vollständig erfasst"}
+                {incomplete ? t("snapshot.partial") : t("snapshot.complete")}
               </span>
             )}
           </div>
           {busy && (
             <div className="working" role="status">
               <span className="spinner" />
-              {busy} …{" "}
-              <span className="muted">Die Navigation bleibt verfügbar.</span>
+              {t(busy)} …{" "}
+              <span className="muted">{t("app.navigationAvailable")}</span>
             </div>
           )}
           {error && <ErrorNotice error={error} />}
           {stale && snapshot && (
-            <div className="notice warning">
-              Die letzte Erfassung bleibt sichtbar. Aktualisiere den Status,
-              bevor du eine weitere Änderung vorbereitest.
-            </div>
+            <div className="notice warning">{t("snapshot.staleHelp")}</div>
           )}
           {!loading &&
             !snapshot &&
             (view === "overview" || view === "menu") && (
               <section className="panel">
-                <Empty title="Erst erfassen, dann entscheiden.">
-                  Mit „Aktualisieren“ liest BootPilot die vorhandene
-                  Bootkonfiguration. Für geschützte Abfragen kann Windows nach
-                  Administratorrechten fragen.
-                </Empty>
+                <Empty title={t("snapshot.firstScan")}>{t("snapshot.firstScanHelp")}</Empty>
               </section>
             )}
           {snapshot && view === "overview" && (
@@ -1293,7 +1185,7 @@ export default function App() {
               findings={findings}
               busy={!!busy}
               onDiagnose={() =>
-                void run("Diagnose laden", async () =>
+                void run("busy.diagnose", async () =>
                   setFindings(await api.diagnose()),
                 )
               }
@@ -1314,7 +1206,7 @@ export default function App() {
               backups={backups}
               busy={!!busy}
               onReload={() =>
-                void run("Sicherungen laden", async () =>
+                void run("busy.backups", async () =>
                   setBackups(await api.listBackups()),
                 )
               }
@@ -1327,12 +1219,12 @@ export default function App() {
               result={registration}
               busy={!!busy}
               onReload={() =>
-                void run("Codex-Status laden", async () =>
+                void run("busy.integration", async () =>
                   setIntegration(await api.getIntegrationStatus()),
                 )
               }
               onRegister={() =>
-                void run("Codex einrichten", async () => {
+                void run("busy.register", async () => {
                   setRegistration(await api.registerCodex());
                   setIntegration(await api.getIntegrationStatus());
                 })
@@ -1350,11 +1242,7 @@ export default function App() {
             />
           )}
           {report && <Report report={report} />}
-          <footer>
-            BootPilot verwaltet vorhandene Bootoptionen. Ein
-            Konfigurationsergebnis und ein erfolgreicher Boot-Test werden
-            getrennt ausgewiesen.
-          </footer>
+          <footer>{t("app.footer")}</footer>
         </main>
       </div>
     </div>

@@ -37,6 +37,21 @@ arguments. The WebView must not have general shell or filesystem access.
 
 Codex provides the assistant; BootPilot does not require its own AI API key.
 
+## Languages
+
+The desktop interface supports German (the default) and English. Use the language
+selector in the top bar; your choice is remembered on this device. Translations
+are bundled for offline use, including date and number formatting. Changing the
+language preserves form edits and prepared plans and does not trigger a system scan.
+
+UI strings live in `src/locales/de.json` and `en.json`. Native message translations
+are presentation-only mappings in `backend-de.json`, `backend-en.json` and
+`src/localizeBackend.ts`; unknown native/OS messages and raw technical details
+remain in their original language. Boot-entry names, paths and configuration
+diffs are never translated. CLI/MCP protocol fields and responses remain unchanged.
+Keep resource keys and interpolation placeholders equivalent in both languages;
+`npm run test:ui` verifies these contracts and language-switch behavior.
+
 ## Development and contributions
 
 Windows x64 is the initial target. A Rust toolchain, Node.js, the Microsoft C++

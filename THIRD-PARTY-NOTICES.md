@@ -8,6 +8,8 @@ conservative coverage. Their presence does not imply endorsement.
 
 Principal components include [Tauri](https://github.com/tauri-apps/tauri),
 [React](https://github.com/facebook/react),
+[i18next](https://github.com/i18next/i18next) and
+[react-i18next](https://github.com/i18next/react-i18next),
 [rmcp](https://github.com/modelcontextprotocol/rust-sdk),
 [Tokio](https://github.com/tokio-rs/tokio), and
 [windows-rs](https://github.com/microsoft/windows-rs).

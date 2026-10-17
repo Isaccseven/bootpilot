@@ -263,6 +263,25 @@ label {
   gap: 8px;
   font-size: 11px;
 }
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.language-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.language-control select {
+  width: auto;
+  min-height: 32px;
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 11px;
+}
 .status-dot {
   display: inline-block;
   width: 6px;
@@ -901,8 +920,21 @@ footer {
     width: 100%;
   }
   .topbar {
-    height: 44px;
-    padding: 0 20px;
+    height: auto;
+    min-height: 44px;
+    padding: 8px 20px;
+    font-size: 10px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .topbar-controls {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .language-control {
+    font-size: 10px;
+  }
+  .language-control select {
     font-size: 10px;
   }
   .local-label {
