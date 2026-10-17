@@ -1,0 +1,12 @@
+[package]
+name = "boot-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+boot-service = { path = "../boot-service" }
+boot-core = { path = "../boot-core" }
+serde.workspace = true
+serde_json.workspace = true

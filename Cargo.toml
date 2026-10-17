@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/boot-core", "crates/boot-windows", "crates/boot-admin"]
+members = ["crates/boot-core", "crates/boot-windows", "crates/boot-admin", "crates/boot-service", "crates/boot-cli", "crates/boot-mcp"]
 resolver = "2"
 
 [workspace.package]
@@ -14,3 +14,5 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 schemars = { version = "1", features = ["chrono04", "uuid1"] }
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "macros", "transport-io", "schemars"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
