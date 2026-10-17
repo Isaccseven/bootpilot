@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore BootPilot, an early-stage Windows project for inspecting boot configuration and preparing reviewable changes. See the roadmap and source.">
+  <title>BootPilot — Windows boot configuration project</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="#top">BootPilot</a>
+    <nav aria-label="Main navigation">
+      <a href="#roadmap">Roadmap</a>
+      <a href="https://github.com/Isaccseven/bootpilot#readme">Documentation</a>
+    </nav>
+  </header>
+  <main id="main" tabindex="-1">
+    <section class="hero section container" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="development-notice">Active development · Not release ready</p>
+        <h1 id="hero-title">A clearer view of your boot configuration.</h1>
+        <p>BootPilot is a Windows desktop project for inspecting boot configuration and preparing explicit, reviewable changes.</p>
+        <p class="muted release-status">The capabilities below are planned. No production release or successful hardware boot test has been verified.</p>
+        <div class="actions">
+          <a class="action primary" href="https://github.com/Isaccseven/bootpilot">View on GitHub</a>
+          <a class="action secondary" href="https://github.com/Isaccseven/bootpilot#readme">Read the README</a>
+        </div>
+        <p class="small muted">Initial target: Windows x64.</p>
+      </div>
+      <figure class="workflow">
+        <h2>Planned workflow</h2>
+        <ol>
+          <li>Inspect configuration</li>
+          <li>Review a change plan</li>
+          <li>Apply a validated plan</li>
+        </ol>
+        <figcaption>Conceptual workflow — not an application screenshot.</figcaption>
+      </figure>
+    </section>
+    <section class="section container" id="roadmap" aria-labelledby="roadmap-title">
+      <h2 id="roadmap-title">What BootPilot is working toward</h2>
+      <p class="section-intro muted">These are roadmap goals, not claims of shipped or hardware-validated functionality.</p>
+      <div class="roadmap-grid">
+        <article class="roadmap-card">
+          <p class="label">Planned</p>
+          <h3>Understand the current setup</h3>
+          <p>Inspect Windows BCD and UEFI entries, boot order and available security status. Identify Windows/Linux boot issues from system evidence, and make unavailable data explicit.</p>
+        </article>
+        <article class="roadmap-card">
+          <p class="label">Planned</p>
+          <h3>Review supported changes</h3>
+          <p>Preview boot order, menu defaults and timeout changes. Support configuration in an existing Grub2Win installation, including validated CachyOS kernel paths.</p>
+        </article>
+        <article class="roadmap-card">
+          <p class="label">Planned</p>
+          <h3>Keep changes scoped</h3>
+          <p>Apply current, validated plans through a narrowly scoped administrator helper, with backups, result checks and targeted recovery.</p>
+        </article>
+      </div>
+    </section>
+    <section class="section container" aria-labelledby="scope-title">
+      <h2 id="scope-title">Clear limits, explicit changes</h2>
+      <p class="section-intro">The planned scope excludes partitioning, formatting, operating system removal, firmware updates, and automatic changes to Secure Boot or BitLocker. Reboots are not automatic.</p>
+      <aside class="scope-note" aria-labelledby="tests-title">
+        <h3 id="tests-title">What passing tests means</h3>
+        <p>Development checks use simulated adapters and temporary files. Passing those checks does not establish that a machine will boot.</p>
+      </aside>
+    </section>
+    <section class="section container" aria-labelledby="architecture-title">
+      <h2 id="architecture-title">One core for the desktop and Codex</h2>
+      <p class="section-intro">The architecture pairs Tauri 2, React and TypeScript with a shared Rust core. The desktop interface and a local MCP server for Codex are intended to use the same structured operations.</p>
+      <p class="muted">Codex provides the assistant. BootPilot does not require its own AI API key.</p>
+      <div class="contribute">
+        <h3>Help shape the project</h3>
+        <p>Explore the source, read the current development notes, or contribute a focused change. Document what you actually verified. Keep private machine inventories, credentials and recovery material out of contributions.</p>
+        <div class="actions">
+          <a class="action primary" href="https://github.com/Isaccseven/bootpilot">View on GitHub</a>
+          <a class="text-action" href="https://github.com/Isaccseven/bootpilot#readme">Read the README</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="container">
+      <p>BootPilot original source: <a href="https://github.com/Isaccseven/bootpilot/blob/HEAD/LICENSE">MIT License</a>. Third-party dependencies retain their own licenses. Grub2Win is independently licensed and is not bundled.</p>
+    </div>
+  </footer>
+</body>
+</html>
