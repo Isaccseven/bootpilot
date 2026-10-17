@@ -51,7 +51,7 @@ Program Files und WebView2; es gibt keine eigenen Boot-/Registrierungs-Hooks.
 
 REA diente ausschließlich zur Untersuchung der vorhandenen Integration und
 Bootloader-Grenzen. Die datierten Untersuchungshinweise und die
-[Entwurfsspezifikation](superpowers/specs/2026-10-17-bootpilot-design.md) dokumentieren
+[Entwurfsspezifikation](https://github.com/Isaccseven/bootpilot/blob/dc174ac06bf8d535e727ff993ff96439a03b7150/docs/superpowers/specs/2026-10-17-bootpilot-design.md) dokumentieren
 die daraus abgeleiteten Grenzen. Private REA-Rohdaten und reale Maschineninventare
 sind kein Bestandteil der öffentlichen Pakete. Es wurde kein fremder
 Grub2Win-Quelltext, keine Oberfläche und kein Bootloader übernommen.

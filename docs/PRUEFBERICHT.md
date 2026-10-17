@@ -23,33 +23,51 @@ Quellbaum, Node.js oder Rust. Installer und Administratorhelfer werden dabei
 nicht gestartet. Ein Release prüft die Ausgabemenge und SHA-256-Werte nochmals,
 bevor ein separater Job die Vorabversion publiziert.
 
-## Tatsächlich nachgewiesen und offene Abnahme
+## Tatsächlich nachgewiesen
 
-Die Paket-Guard-Suite wurde lokal zunächst mit fehlendem Implementierungsskript
-fehlschlagend ausgeführt und anschließend erfolgreich: relative/root/nonempty
-Ausgabeziele, leeres oder fehlendes erlaubtes Ziel, exakte ZIP-Struktur,
-verbotenes Fixtureprogramm, leeres Binary, ungültiger PE-Header, falsche
-Architektur und DLL statt EXE. Vorhandene Testdaten blieben erhalten.
-Die Suite prüft außerdem den echten Paketeinstieg bei belegtem Ziel, die frühe
-Ablehnung ungültiger Prüfverzeichnisse sowie ZIP-Traversal und doppelte Einträge
-ohne Ausführung eines Fixtureprogramms; insgesamt 16 erfolgreiche Prüfungen.
+Der vollständige [Windows-CI-Lauf 39046311499](https://github.com/Isaccseven/bootpilot/actions/runs/39046311499)
+für Quellstand [dc174ac](https://github.com/Isaccseven/bootpilot/commit/dc174ac06bf8d535e727ff993ff96439a03b7150)
+war erfolgreich. Nachgewiesen sind:
 
-Produktions-Sidecars für Windows x64, TypeScript-/Frontend-Build und generierte
-Dependency-Hinweise wurden lokal erfolgreich gebaut. Der anschließende native
-Releasebuild wurde von Windows Smart App Control beim Start eines unsignierten
-`schemars`-Build-Skripts mit Betriebssystemfehler 4551 blockiert. Daher ist durch
-diesen lokalen Paketlauf kein fertiger Installer oder portabler Laufzeittest
-nachgewiesen. Die Sicherheitsrichtlinie wurde nicht verändert oder umgangen.
-Actionlint und Syntax-/Fixtureprüfungen der echten Workflow-Schritte waren
-erfolgreich; dies ist kein Ersatz für einen Windows-Runner-Lauf.
+- Rust-Formatierung und Workspace-Clippy mit Warnungen als Fehler;
+- 118 Rust- und 22 UI-Tests sowie TypeScript- und Frontend-Build;
+- 16 Paket-Guard-Prüfungen gegen falsche Ausgabeziele, ungültige PE-Dateien,
+  verbotene ZIP-Inhalte, Traversal und doppelte Einträge;
+- der MCP-Fixturetest aller neun Werkzeuge, Produktions-Sidecars und nativer Build;
+- der normale Produktions-CLI-/MCP-Test aus einem leeren Arbeitsverzeichnis;
+- der optimierte Paketbau einschließlich NSIS-Installer und portablem ZIP.
 
-Die vollständige abschließende lokale Prüfung, ein aktueller vollständiger
-GitHub-Windows-Lauf, die echte NSIS-Installation/Deinstallation, das Starten der
-installierten Oberfläche, die tatsächliche Codex-Registrierung einschließlich
-Erhalt anderer Server sowie die sichtbare Abnahme werden erst nach den letzten
-Integrationsfixes gesondert protokolliert. Ein früher grüner Core-CI-Lauf ist
-dafür kein Nachweis. Der Paketvertrag allein bestätigt weder UAC-Dialoge noch
-die Laufzeitbedienung dieser konkreten Maschine.
+Das CI-Artefakt `windows-preview` mit Kennung `12106177261` wurde heruntergeladen.
+Sein vollständiger Artefaktdigest und beide SHA-256-Werte aus `SHA256SUMS.txt`
+wurden lokal geprüft. Dateiliste und x64-PE-Header des portablen Pakets wurden
+ebenfalls geprüft. Anschließend bestand das entpackte Paket lokal den
+eigenständigen `verify-package.ps1`-Test: CLI-Status, MCP-Initialisierung,
+Werkzeugliste mit neun Werkzeugen und lesender Status, ohne Quellbaumzugriff,
+Node.js, Rust, neue Booterfassung oder erhöhte Rechte.
+
+Auch die portable `bootpilot.exe` aus demselben CI-Artefakt wurde als normaler
+Benutzer gestartet und sichtbar geprüft. Die native Übersicht zeigte echte,
+bereits vorhandene Erfassungsdaten. Die Codex-Ansicht bestätigte den direkten
+MCP-Test mit `initialize`, `tools/list` und `boot_get_status`. Vorhandene
+Cachedaten bestätigen dabei keine neue Erfassung durch den aktuellen Helfer.
+
+Ein früherer lokaler Paketbau war an Windows Smart App Control beim Start eines
+unsignierten Build-Skripts gescheitert. Ein einzelner späterer lokaler Lauf des
+überarbeiteten Quellstands wurde nach erfolgreicher CI-Paketerstellung beendet
+und gilt als unterbrochen, weder als erfolgreich noch als fehlgeschlagen. Keine
+Sicherheitsrichtlinie wurde verändert oder umgangen. Die oben genannte
+Paketvalidierung bezieht sich ausdrücklich auf das heruntergeladene CI-Artefakt.
+
+## Noch offene sichtbare Abnahme
+
+Installation, Deinstallationseintrag und Programmverknüpfung, Start und sichtbare
+Bedienung der installierten Oberfläche sowie tatsächliche Codex-Registrierung
+einschließlich Erhalt anderer Server sind noch nicht bestätigt. Eine frische
+Erfassung durch den erhöhten Helfer und eine darauf beruhende Vorschau wurden
+mit diesem finalen Artefakt ebenfalls noch nicht abgenommen. Die Prüfung des
+Deinstallationseintrags ist von einer tatsächlich ausgeführten Deinstallation
+zu unterscheiden; eine Deinstallation wurde nicht getestet. Die erfolgreiche
+portable Abnahme ersetzt diese offenen Schritte nicht.
 
 Während der Entwicklung wurden keine echten Boot-Schreibtests oder Neustarts
 als Testmaßnahme durchgeführt. Reale Bootdaten und vorherige/nachherige
@@ -68,7 +86,7 @@ Ein dauerhafter Schreibvorsatz allein ist nach einer Unterbrechung kein
 ausreichender eigener Schreibbeleg, selbst wenn aktuelle Bytes dem geplanten
 Ergebnis entsprechen. Solche Fälle verlangen manuelle Untersuchung.
 
-Ein direkter MCP-Test bestätigt die installierte EXE, nicht die bereits laufende
+Ein direkter MCP-Test bestätigt die geprüfte EXE, nicht die bereits laufende
 Codex-Sitzung. Nach Registrierung kann ein vollständiger Codex-Neustart nötig
 sein. Ein Status ohne neue Erfassung enthält nur einen vorhandenen Cache oder
 explizit keinen Snapshot. Unvollständige Systemquellen werden nicht als
