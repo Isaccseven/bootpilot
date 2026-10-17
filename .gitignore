@@ -3,3 +3,12 @@
 /dist/
 /src-tauri/target/
 *.log
+/.superpowers/
+/.env
+/.env.*
+!/.env.example
+/backups/
+/diagnostics/
+*.pfx
+*.p12
+*.key
