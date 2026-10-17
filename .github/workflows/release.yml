@@ -34,6 +34,9 @@ jobs:
     steps:
       - name: Validate requested tag
         run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           if ($env:RELEASE_TAG -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
             throw 'Provide an existing version tag such as v0.1.0 or v0.1.0-alpha.1.'
           }
@@ -46,6 +49,9 @@ jobs:
 
       - name: Reject incomplete release sources
         run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           foreach ($path in @('Cargo.lock', 'rust-toolchain.toml', 'package.json', 'package-lock.json', 'src-tauri/tauri.conf.json', 'scripts/package.ps1')) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
               throw "Release source is incomplete: required file '$path' is missing. No release will be published."
@@ -54,6 +60,9 @@ jobs:
 
       - name: Install repository Rust toolchain
         run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           $toolchain = Get-Content -Raw rust-toolchain.toml
           if ($toolchain -notmatch '(?m)^channel\s*=\s*"1\.99\.1"\s*$') {
             throw 'Release expects exact Rust 1.99.1 in rust-toolchain.toml.'
@@ -64,10 +73,13 @@ jobs:
       - name: Check package version and build inputs
         id: version
         run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           $metadataJson = cargo metadata --no-deps --locked --format-version 1
           if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata could not be read.' }
           $metadata = $metadataJson | ConvertFrom-Json
-          foreach ($name in @('boot-core', 'boot-mcp', 'boot-cli', 'boot-admin')) {
+          foreach ($name in @('boot-core', 'boot-windows', 'boot-service', 'boot-mcp', 'boot-cli', 'boot-admin', 'bootpilot-app')) {
             $package = @($metadata.packages | Where-Object name -eq $name)
             if ($package.Count -ne 1 -or "v$($package[0].version)" -cne $env:RELEASE_TAG) {
               throw "Package '$name' is missing or its version does not match $env:RELEASE_TAG."
@@ -78,38 +90,84 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '24.22.0'
           cache: npm
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          npm ci
 
       - name: Check TypeScript
-        run: npm run typecheck
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          npm run typecheck
 
       - name: Test user interface
-        run: npm run test:ui
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          npm run test:ui
 
       - name: Build frontend
-        run: npm run build
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          npm run build
 
-      - name: Build MCP server for protocol smoke test
-        run: cargo build --locked --package boot-mcp
+      - name: Prepare production sidecars before workspace compilation
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          ./scripts/prepare-sidecars.ps1 -Profile Release
+
+      - name: Check package guards without executing fixtures
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          ./scripts/test-package.ps1
 
       - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          cargo fmt --all -- --check
 
       - name: Lint Rust workspace
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Test Rust workspace
-        run: cargo test --workspace --locked
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          cargo test --workspace --locked
 
       - name: Test MCP protocol using test data
-        run: npm run test:mcp
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
+          npm run test:mcp
 
       - name: Build release binaries and NSIS installer
         run: |
+          $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           $outputDirectory = Join-Path $env:RUNNER_TEMP 'bootpilot-release'
           if (Test-Path -LiteralPath $outputDirectory) { throw 'Release output directory must start absent.' }
           pwsh -NoProfile -File ./scripts/package.ps1 -OutputDirectory $outputDirectory
@@ -119,6 +177,8 @@ jobs:
         id: assets
         run: |
           $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           $outputDirectory = Join-Path $env:RUNNER_TEMP 'bootpilot-release'
           $version = $env:RELEASE_TAG.Substring(1)
           $expected = @("BootPilot-$version-windows-x64-setup.exe", "BootPilot-$version-windows-x64.zip")
@@ -138,6 +198,8 @@ jobs:
               if ($entries.Count -ne 1) { throw "Portable package requires exactly one nonempty $binary." }
             }
           } finally { $zip.Dispose() }
+          . ./scripts/package-common.ps1
+          Assert-PortableArchive (Join-Path $outputDirectory $expected[1])
           $checksums = foreach ($name in $expected) {
             $hash = (Get-FileHash -LiteralPath (Join-Path $outputDirectory $name) -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $name"

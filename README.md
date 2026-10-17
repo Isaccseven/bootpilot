@@ -4,12 +4,13 @@ A Windows desktop app for inspecting boot configuration and preparing explicit,
 reviewable boot changes. Built with Tauri 2, React, TypeScript and Rust, with a
 local MCP server for Codex.
 
-**Status: under active development. Not release ready.** Planned functionality
-below is a roadmap, not a claim that it is implemented or validated on hardware.
-There is currently no verified production release or successful hardware boot
-test. See the implementation and validation notes accompanying each release.
+**Status: Windows x64 preview, undergoing final integration and acceptance.**
+Unsigned NSIS and portable builds are supported. Automated checks and a direct
+MCP handshake do not prove installation, a live Codex session or a successful
+hardware boot. Read the [validation report](docs/PRUEFBERICHT.md) and release notes
+for the checks actually completed on a particular artifact.
 
-## Planned scope
+## Scope
 
 - Inspect Windows BCD and UEFI boot entries, boot order and available security
   status, explicitly reporting unavailable data.
@@ -47,6 +48,24 @@ read-only inspection and explicitly authorized hardware changes.
 Issues and contributions are welcome. Keep changes focused and document which
 behaviors were actually verified. Never include private machine inventories,
 boot backups, credentials, recovery material or local toolchains in commits.
+
+With PowerShell 7, Rust 1.99.1, Node.js 24.22.0, MSVC and the Windows SDK on PATH:
+
+```powershell
+pwsh -NoProfile -File ./scripts/build.ps1
+pwsh -NoProfile -File ./scripts/package.ps1 -OutputDirectory C:\packages\BootPilot
+```
+
+The output directory must be absolute and absent or empty. Packaging produces
+exactly the versioned NSIS installer and portable ZIP; existing output files are
+never deleted. The scripts use the public toolchain PATH, locked dependencies and
+an explicit Windows x64 target. They do not install the application, register
+Codex, launch the administrator helper, change boot configuration or reboot.
+Tauri may download its NSIS tools and WebView2 bootstrapper during packaging.
+
+See [German usage and recovery instructions](docs/BENUTZUNG.md),
+[architecture](docs/ARCHITEKTUR.md), [CI and release checks](docs/CI.md), and
+[third-party notices](THIRD-PARTY-NOTICES.md).
 
 ## Licensing and provenance
 

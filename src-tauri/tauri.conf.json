@@ -16,5 +16,32 @@
       "capabilities": ["main"]
     }
   },
-  "bundle": {"active":false, "icon":["icons/icon.ico"]}
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "externalBin": ["binaries/boot-admin", "binaries/boot-cli", "binaries/boot-mcp"],
+    "resources": {
+      "../LICENSE": "LICENSE",
+      "../README.md": "README.md",
+      "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
+      "generated/THIRD-PARTY-LICENSES.txt": "THIRD-PARTY-LICENSES.txt",
+      "../docs/BENUTZUNG.md": "docs/BENUTZUNG.md",
+      "../docs/ARCHITEKTUR.md": "docs/ARCHITEKTUR.md",
+      "../docs/PRUEFBERICHT.md": "docs/PRUEFBERICHT.md",
+      "../docs/CI.md": "docs/CI.md",
+      "../scripts/register-codex.ps1": "scripts/register-codex.ps1",
+      "../scripts/verify-package.ps1": "scripts/verify-package.ps1"
+    },
+    "windows": {
+      "webviewInstallMode": {"type": "downloadBootstrapper", "silent": true},
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": ["German", "English"],
+        "displayLanguageSelector": true
+      }
+    }
+  }
 }
