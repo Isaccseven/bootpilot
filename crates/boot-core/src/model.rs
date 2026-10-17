@@ -27,6 +27,7 @@ pub enum Source {
     Bitlocker,
     Grub,
     Linux,
+    Volumes,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -39,6 +40,8 @@ pub struct SourceCompleteness {
     pub bitlocker: CollectionState,
     pub grub: CollectionState,
     pub linux: CollectionState,
+    #[serde(default)]
+    pub volumes: CollectionState,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -77,7 +80,8 @@ pub enum MenuEntryKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MenuEntry {
-    /// The parser's known, exact GRUB ID; never a caller-supplied code fragment.
+    /// Explicit GRUB ID, or stable parser-generated ID resolved to a menu index by the planner.
+    /// Never a caller-supplied code fragment.
     pub id: String,
     pub title: String,
     pub kind: MenuEntryKind,
@@ -136,6 +140,14 @@ pub struct Snapshot {
     pub firmware_entries: Vec<FirmwareEntry>,
     pub firmware_order: Vec<Uuid>,
     pub boot_current: Option<BootCurrent>,
+    #[serde(default)]
+    pub boot_next: Option<u16>,
+    #[serde(default)]
+    pub loader_info: Option<String>,
+    #[serde(default)]
+    pub loader_entry_selected: Option<String>,
+    #[serde(default)]
+    pub volumes: Vec<VolumeInfo>,
     pub secure_boot: Option<bool>,
     /// Protection status of the Windows system volume; unknown is `null`.
     pub bitlocker: Option<bool>,
@@ -156,6 +168,10 @@ impl Snapshot {
             firmware_entries: Vec::new(),
             firmware_order: Vec::new(),
             boot_current: None,
+            boot_next: None,
+            loader_info: None,
+            loader_entry_selected: None,
+            volumes: Vec::new(),
             secure_boot: None,
             bitlocker: None,
             grub: None,
@@ -164,6 +180,20 @@ impl Snapshot {
             source_errors: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VolumeInfo {
+    pub volume_id: Option<Uuid>,
+    pub partition_id: Option<Uuid>,
+    pub paths: Vec<String>,
+    pub filesystem: Option<String>,
+    pub filesystem_uuid: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub disk_number: Option<u32>,
+    pub partition_number: Option<u32>,
+    pub gpt_type: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
