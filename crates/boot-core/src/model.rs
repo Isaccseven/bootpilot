@@ -316,6 +316,10 @@ pub struct ChangePlan {
 pub enum StepPhase {
     Intent,
     Written,
+    /// Adapter failed before invoking any mutation. Never confers ownership.
+    NotWritten,
+    /// Mutation was invoked but completion or verification failed.
+    WriteUncertain,
     Verified,
     RollbackIntent,
     RolledBack,
@@ -386,16 +390,33 @@ pub struct BackupRecord {
     pub outcome: Option<ApplyReport>,
 }
 
+/// An adapter must classify errors at the mutation boundary, not by error code.
+/// Provider/write errors after invoking a mutation are conservatively uncertain.
+#[derive(Debug, Clone)]
+pub enum WriteFailure {
+    NotWritten(BootError),
+    MayHaveWritten(BootError),
+}
+impl WriteFailure {
+    pub fn into_error(self) -> BootError {
+        match self {
+            Self::NotWritten(error) | Self::MayHaveWritten(error) => error,
+        }
+    }
+}
+pub type TargetWriteResult = Result<(), WriteFailure>;
+
 pub trait SystemAccess {
     fn read_snapshot(&mut self) -> BootResult<Snapshot>;
     fn read_target(&mut self, target: &Target) -> BootResult<TargetValue>;
     /// Recheck expected immediately before mutation; verify non-atomic firmware writes afterwards.
+    /// Return NotWritten only when no mutation was invoked; classify all later errors as MayHaveWritten.
     fn write_target(
         &mut self,
         target: &Target,
         expected: &TargetValue,
         replacement: &TargetValue,
-    ) -> BootResult<()>;
+    ) -> TargetWriteResult;
 }
 
 pub trait PlanStore {

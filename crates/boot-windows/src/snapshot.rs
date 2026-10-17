@@ -137,16 +137,16 @@ impl SystemAccess for WindowsSystem {
         target: &Target,
         expected: &TargetValue,
         replacement: &TargetValue,
-    ) -> BootResult<()> {
+    ) -> TargetWriteResult {
         if !self.authorized {
-            return Err(super::error(
+            return Err(WriteFailure::NotWritten(super::error(
                 ErrorCode::InvalidRequest,
                 "Schreiben erfordert eine geprüfte Helfertransaktion.",
-            ));
+            )));
         }
         #[cfg(windows)]
         {
-            crate::write::reject_grub2win()?;
+            crate::write::reject_grub2win().map_err(WriteFailure::NotWritten)?;
             match (target, expected, replacement) {
                 (
                     Target::FirmwareOrder,
@@ -157,20 +157,23 @@ impl SystemAccess for WindowsSystem {
                     Target::GrubMain | Target::GrubUser,
                     TargetValue::FileBytes(old),
                     TargetValue::FileBytes(new),
-                ) => self.file(*target)?.replace(old, new),
-                _ => Err(super::error(
+                ) => self
+                    .file(*target)
+                    .map_err(WriteFailure::NotWritten)?
+                    .replace(old, new),
+                _ => Err(WriteFailure::NotWritten(super::error(
                     ErrorCode::InvalidRequest,
                     "Ziel und Werttyp stimmen nicht überein.",
-                )),
+                ))),
             }
         }
         #[cfg(not(windows))]
         {
             let _ = (target, expected, replacement);
-            Err(super::error(
+            Err(WriteFailure::NotWritten(super::error(
                 ErrorCode::NotImplemented,
                 "Windows erforderlich",
-            ))
+            )))
         }
     }
 }

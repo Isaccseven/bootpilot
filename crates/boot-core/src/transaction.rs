@@ -82,7 +82,7 @@ pub fn apply_plan(
         boot_tested: false,
     };
     let mut sequence = 0;
-    let mut attempted = Vec::new();
+    let mut recoverable = Vec::new();
     let mut failed = false;
     for change in &plan.changes {
         if change.expected == change.replacement {
@@ -103,9 +103,46 @@ pub fn apply_plan(
             failed = true;
             break;
         }
-        attempted.push(change);
         let result = (|| {
-            system.write_target(&change.target, &change.expected, &change.replacement)?;
+            match system.write_target(&change.target, &change.expected, &change.replacement) {
+                Ok(()) => recoverable.push(change),
+                Err(failure) => {
+                    let phase = match &failure {
+                        WriteFailure::NotWritten(_) => {
+                            // Even equality with replacement cannot make a foreign write ours.
+                            let current = system.read_target(&change.target).ok();
+                            if current.as_ref() != Some(&change.expected) {
+                                report.remaining_deviations.push(deviation(
+                                    change,
+                                    "Abgewiesener Schreibversuch; fremder Zielzustand bleibt erhalten.".into(),
+                                    current,
+                                ));
+                            }
+                            StepPhase::NotWritten
+                        }
+                        WriteFailure::MayHaveWritten(_) => {
+                            recoverable.push(change);
+                            StepPhase::WriteUncertain
+                        }
+                    };
+                    let error = failure.into_error();
+                    // Missing receipts never authorize later restore (Intent alone is insufficient).
+                    if let Err(storage_error) = record(
+                        store,
+                        backup.id,
+                        &mut sequence,
+                        change.target,
+                        phase,
+                        Some(error.to_string()),
+                        &mut report,
+                    ) {
+                        return Err(
+                            storage_error.with_details(serde_json::json!({"write_error": error}))
+                        );
+                    }
+                    return Err(error);
+                }
+            }
             record(
                 store,
                 backup.id,
@@ -148,7 +185,7 @@ pub fn apply_plan(
         }
     }
     if failed {
-        for change in attempted.into_iter().rev() {
+        for change in recoverable.into_iter().rev() {
             let current = system.read_target(&change.target);
             if current.as_ref().ok() == Some(&change.expected) {
                 continue;
@@ -171,7 +208,9 @@ pub fn apply_plan(
                     None,
                     &mut report,
                 )?;
-                system.write_target(&change.target, &change.replacement, &change.expected)?;
+                system
+                    .write_target(&change.target, &change.replacement, &change.expected)
+                    .map_err(WriteFailure::into_error)?;
                 if system.read_target(&change.target)? != change.expected {
                     return Err(error(
                         ErrorCode::RollbackFailed,
@@ -315,15 +354,24 @@ pub fn prepare_restore(
                 "Ziel wurde nach dieser Sicherung fremd verändert.",
             ));
         }
+        // Intent can precede a rejected write or process death. A positive receipt is
+        // required, and a later rollback/rejection invalidates that ownership evidence.
+        let receipt = backup
+            .journal
+            .iter()
+            .filter(|s| s.target == target.target && s.phase != StepPhase::Failed)
+            .max_by_key(|s| s.sequence);
         if current != target.original
-            && !backup
-                .journal
-                .iter()
-                .any(|s| s.target == target.target && s.phase == StepPhase::Intent)
+            && !receipt.is_some_and(|s| {
+                matches!(
+                    s.phase,
+                    StepPhase::Written | StepPhase::Verified | StepPhase::WriteUncertain
+                )
+            })
         {
             return Err(error(
                 ErrorCode::InvalidBackup,
-                "Kein Schreibbeginn für dieses Sicherungsziel dokumentiert.",
+                "Kein gültiger Schreibnachweis für dieses Ziel; manuelle Prüfung erforderlich.",
             ));
         }
         if let TargetValue::FirmwareOrder(ids) = &target.original {

@@ -127,6 +127,8 @@ export interface JournalStep {
   phase:
     | "intent"
     | "written"
+    | "not_written"
+    | "write_uncertain"
     | "verified"
     | "rollback_intent"
     | "rolled_back"

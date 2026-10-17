@@ -378,3 +378,35 @@ describe("Sicherungen und Codex", () => {
     expect(screen.getByText("C:\\BootPilot\\boot-mcp.exe")).toBeVisible();
   });
 });
+
+it("write_dispositions_are_visible_in_reloaded_backup_journals", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByText("Windows Boot Manager");
+  ipc.invoke.mockResolvedValueOnce([
+    {
+      ...backup,
+      journal: [
+        {
+          sequence: 1,
+          target: "grub_main",
+          phase: "not_written",
+          at: backup.created_at,
+          detail: null,
+        },
+        {
+          sequence: 2,
+          target: "grub_user",
+          phase: "write_uncertain",
+          at: backup.created_at,
+          detail: null,
+        },
+      ],
+    },
+  ]);
+  await user.click(screen.getByRole("button", { name: "Sicherungen" }));
+  await user.click(await screen.findByText("Gesicherte Ziele & Protokoll"));
+  expect(await screen.findByText(/Nicht geschrieben/)).toBeVisible();
+  expect(screen.getByText(/Schreibausgang ungewiss/)).toBeVisible();
+  expect(ipc.invoke.mock.calls.some((c) => c[0] === "apply")).toBe(false);
+});

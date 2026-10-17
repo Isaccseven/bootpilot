@@ -143,7 +143,7 @@ impl GuardedFile {
         }
         Ok(bytes)
     }
-    pub(crate) fn replace(&mut self, expected: &[u8], replacement: &[u8]) -> BootResult<()> {
+    pub(crate) fn replace(&mut self, expected: &[u8], replacement: &[u8]) -> TargetWriteResult {
         self.replace_with(expected, replacement, |f, bytes| f.write_all(bytes))
     }
     fn replace_with(
@@ -151,36 +151,47 @@ impl GuardedFile {
         expected: &[u8],
         replacement: &[u8],
         write: impl FnOnce(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
-    ) -> BootResult<()> {
-        if replacement.len() > 512 * 1024 {
-            return Err(crate::error(
-                ErrorCode::InvalidRequest,
-                "GRUB-Ersatz überschreitet Größenlimit.",
-            ));
-        }
-        if self.read()? != expected {
-            return Err(crate::error(
-                ErrorCode::Conflict,
-                "GRUB-Datei wurde seit der Vorschau verändert.",
-            ));
-        }
-        self.file
-            .seek(SeekFrom::Start(0))
-            .map_err(crate::io_error)?;
-        // Exclusive same-handle mutation avoids a pathname exchange race. This is not
-        // power-fail atomic: interrupted bytes require visible, manually reviewed recovery.
-        write(&mut self.file, replacement).map_err(crate::io_error)?;
-        self.file
-            .set_len(replacement.len() as u64)
-            .map_err(crate::io_error)?;
-        self.file.sync_all().map_err(crate::io_error)?;
-        if self.read()? != replacement {
-            return Err(crate::error(
-                ErrorCode::VerificationFailed,
-                "GRUB-Datei konnte nicht bestätigt werden.",
-            ));
-        }
-        Ok(())
+    ) -> TargetWriteResult {
+        let mut mutation_invoked = false;
+        let result = (|| -> BootResult<()> {
+            if replacement.len() > 512 * 1024 {
+                return Err(crate::error(
+                    ErrorCode::InvalidRequest,
+                    "GRUB-Ersatz überschreitet Größenlimit.",
+                ));
+            }
+            if self.read()? != expected {
+                return Err(crate::error(
+                    ErrorCode::Conflict,
+                    "GRUB-Datei wurde seit der Vorschau verändert.",
+                ));
+            }
+            self.file
+                .seek(SeekFrom::Start(0))
+                .map_err(crate::io_error)?;
+            // Exclusive same-handle mutation avoids a pathname exchange race. This is not
+            // power-fail atomic: interrupted bytes require visible, manually reviewed recovery.
+            mutation_invoked = true;
+            write(&mut self.file, replacement).map_err(crate::io_error)?;
+            self.file
+                .set_len(replacement.len() as u64)
+                .map_err(crate::io_error)?;
+            self.file.sync_all().map_err(crate::io_error)?;
+            if self.read()? != replacement {
+                return Err(crate::error(
+                    ErrorCode::VerificationFailed,
+                    "GRUB-Datei konnte nicht bestätigt werden.",
+                ));
+            }
+            Ok(())
+        })();
+        result.map_err(|error| {
+            if mutation_invoked {
+                WriteFailure::MayHaveWritten(error)
+            } else {
+                WriteFailure::NotWritten(error)
+            }
+        })
     }
 }
 fn checked_identity(file: &std::fs::File) -> BootResult<(u32, u32, u32)> {
@@ -213,10 +224,13 @@ mod tests {
         let p = d.path().join("config");
         std::fs::write(&p, b"original").unwrap();
         let mut f = GuardedFile::open(&p).unwrap();
-        assert_eq!(
-            f.replace(b"stale", b"replacement").unwrap_err().code,
-            ErrorCode::Conflict
-        );
+        assert!(matches!(
+            f.replace(b"stale", b"replacement"),
+            Err(WriteFailure::NotWritten(BootError {
+                code: ErrorCode::Conflict,
+                ..
+            }))
+        ));
         assert!(std::fs::write(&p, b"foreign").is_err());
         assert!(std::fs::rename(&p, d.path().join("renamed")).is_err());
         f.replace(b"original", b"new").unwrap();
@@ -242,16 +256,19 @@ mod tests {
         let p = d.path().join("config");
         std::fs::write(&p, b"original").unwrap();
         let mut f = GuardedFile::open(&p).unwrap();
-        assert!(
+        assert!(matches!(
             f.replace_with(b"original", b"replacement", |f, b| {
                 f.write_all(&b[..3])?;
                 Err(std::io::Error::other("injected interruption"))
-            })
-            .is_err()
-        );
+            }),
+            Err(WriteFailure::MayHaveWritten(_))
+        ));
         assert_eq!(f.read().unwrap(), b"repginal");
         assert_eq!(
-            f.replace(b"replacement", b"original").unwrap_err().code,
+            f.replace(b"replacement", b"original")
+                .unwrap_err()
+                .into_error()
+                .code,
             ErrorCode::Conflict
         );
     }

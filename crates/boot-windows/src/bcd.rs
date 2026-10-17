@@ -11,99 +11,111 @@ pub fn bitlocker_return_is_success(value: &serde_json::Value) -> bool {
 }
 /// The only BCD mutation: fixed firmware-manager DisplayOrder element.
 #[cfg(windows)]
-pub(crate) fn write_order(expected: &[Uuid], replacement: &[Uuid]) -> BootResult<()> {
-    let mut snapshot = Snapshot::new(Uuid::new_v4(), chrono::Utc::now());
-    collect(&mut snapshot)?;
-    snapshot.sources.firmware = CollectionState::Complete;
-    validate_request(
-        &PlanRequest::Order {
-            entry_ids: replacement.to_vec(),
-        },
-        &snapshot,
-    )?;
-    if snapshot.firmware_order != expected {
-        return Err(crate::error(
-            ErrorCode::Conflict,
-            "Firmware-Reihenfolge wurde verändert.",
-        ));
-    }
-    let _backup = crate::native::enable_privilege("SeBackupPrivilege")?;
-    let _restore = crate::native::enable_privilege("SeRestorePrivilege")?;
-    let connection =
-        WMIConnection::with_namespace_path("ROOT\\WMI").map_err(crate::native::wmi_error)?;
-    let store = object(
-        &checked(call(
-            &connection,
-            "BcdStore",
-            "BcdStore",
-            "OpenStore",
-            &[("File", Variant::String(String::new()))],
-        )?)?,
-        "Store",
-    )?;
-    let manager = open(
-        &connection,
-        &instance_path(&store, "BcdStore")?,
-        Uuid::parse_str("a5a30fa2-3d06-4e9f-b5f4-a01df9d1fcba").unwrap(),
-    )?;
-    // Read the same object's value immediately before this non-atomic provider operation.
-    let ids = element(&connection, &manager, 0x24000001)?
-        .get_property("Ids")
-        .map_err(crate::native::wmi_error)?;
-    let parse_ids = |value: Variant| -> BootResult<Vec<Uuid>> {
-        match value {
-            Variant::Array(values) => values
-                .into_iter()
-                .map(|v| match v {
-                    Variant::String(v) => Uuid::parse_str(&v).map_err(crate::io_error),
-                    _ => Err(crate::error(
-                        ErrorCode::VerificationFailed,
-                        "Ungültige BCD-ID.",
-                    )),
-                })
-                .collect(),
-            _ => Err(crate::error(
-                ErrorCode::VerificationFailed,
-                "Ungültige BCD-Liste.",
-            )),
+pub(crate) fn write_order(expected: &[Uuid], replacement: &[Uuid]) -> TargetWriteResult {
+    let mut mutation_invoked = false;
+    let result = (|| -> BootResult<()> {
+        let mut snapshot = Snapshot::new(Uuid::new_v4(), chrono::Utc::now());
+        collect(&mut snapshot)?;
+        snapshot.sources.firmware = CollectionState::Complete;
+        validate_request(
+            &PlanRequest::Order {
+                entry_ids: replacement.to_vec(),
+            },
+            &snapshot,
+        )?;
+        if snapshot.firmware_order != expected {
+            return Err(crate::error(
+                ErrorCode::Conflict,
+                "Firmware-Reihenfolge wurde verändert.",
+            ));
         }
-    };
-    if parse_ids(ids)? != expected {
-        return Err(crate::error(
-            ErrorCode::Conflict,
-            "Firmware-Reihenfolge wurde unmittelbar vor dem Schreiben verändert.",
-        ));
-    }
-    checked(call(
-        &connection,
-        "BcdObject",
-        &instance_path(&manager, "BcdObject")?,
-        "SetObjectListElement",
-        &[
-            ("Type", Variant::UI4(0x24000001)),
-            (
-                "Ids",
-                Variant::Array(
-                    replacement
-                        .iter()
-                        .map(|id| Variant::String(format!("{{{id}}}")))
-                        .collect(),
-                ),
-            ),
-        ],
-    )?)?;
-    if parse_ids(
-        element(&connection, &manager, 0x24000001)?
+        let _backup = crate::native::enable_privilege("SeBackupPrivilege")?;
+        let _restore = crate::native::enable_privilege("SeRestorePrivilege")?;
+        let connection =
+            WMIConnection::with_namespace_path("ROOT\\WMI").map_err(crate::native::wmi_error)?;
+        let store = object(
+            &checked(call(
+                &connection,
+                "BcdStore",
+                "BcdStore",
+                "OpenStore",
+                &[("File", Variant::String(String::new()))],
+            )?)?,
+            "Store",
+        )?;
+        let manager = open(
+            &connection,
+            &instance_path(&store, "BcdStore")?,
+            Uuid::parse_str("a5a30fa2-3d06-4e9f-b5f4-a01df9d1fcba").unwrap(),
+        )?;
+        // Read the same object's value immediately before this non-atomic provider operation.
+        let ids = element(&connection, &manager, 0x24000001)?
             .get_property("Ids")
-            .map_err(crate::native::wmi_error)?,
-    )? != replacement
-    {
-        return Err(crate::error(
-            ErrorCode::VerificationFailed,
-            "Firmware-Reihenfolge konnte nach dem Schreiben nicht bestätigt werden.",
-        ));
-    }
-    Ok(())
+            .map_err(crate::native::wmi_error)?;
+        let parse_ids = |value: Variant| -> BootResult<Vec<Uuid>> {
+            match value {
+                Variant::Array(values) => values
+                    .into_iter()
+                    .map(|v| match v {
+                        Variant::String(v) => Uuid::parse_str(&v).map_err(crate::io_error),
+                        _ => Err(crate::error(
+                            ErrorCode::VerificationFailed,
+                            "Ungültige BCD-ID.",
+                        )),
+                    })
+                    .collect(),
+                _ => Err(crate::error(
+                    ErrorCode::VerificationFailed,
+                    "Ungültige BCD-Liste.",
+                )),
+            }
+        };
+        if parse_ids(ids)? != expected {
+            return Err(crate::error(
+                ErrorCode::Conflict,
+                "Firmware-Reihenfolge wurde unmittelbar vor dem Schreiben verändert.",
+            ));
+        }
+        let manager_path = instance_path(&manager, "BcdObject")?;
+        checked(call_with_before_invoke(
+            &connection,
+            "BcdObject",
+            &manager_path,
+            "SetObjectListElement",
+            &[
+                ("Type", Variant::UI4(0x24000001)),
+                (
+                    "Ids",
+                    Variant::Array(
+                        replacement
+                            .iter()
+                            .map(|id| Variant::String(format!("{{{id}}}")))
+                            .collect(),
+                    ),
+                ),
+            ],
+            || mutation_invoked = true,
+        )?)?;
+        if parse_ids(
+            element(&connection, &manager, 0x24000001)?
+                .get_property("Ids")
+                .map_err(crate::native::wmi_error)?,
+        )? != replacement
+        {
+            return Err(crate::error(
+                ErrorCode::VerificationFailed,
+                "Firmware-Reihenfolge konnte nach dem Schreiben nicht bestätigt werden.",
+            ));
+        }
+        Ok(())
+    })();
+    result.map_err(|error| {
+        if mutation_invoked {
+            WriteFailure::MayHaveWritten(error)
+        } else {
+            WriteFailure::NotWritten(error)
+        }
+    })
 }
 #[cfg(windows)]
 fn put_input(input: &IWbemClassWrapper, key: &str, value: Variant) -> wmi::WMIResult<()> {
@@ -139,6 +151,17 @@ pub(crate) fn call(
     method: &str,
     args: &[(&str, Variant)],
 ) -> BootResult<IWbemClassWrapper> {
+    call_with_before_invoke(connection, class, path, method, args, || {})
+}
+#[cfg(windows)]
+fn call_with_before_invoke(
+    connection: &WMIConnection,
+    class: &str,
+    path: &str,
+    method: &str,
+    args: &[(&str, Variant)],
+    before_invoke: impl FnOnce(),
+) -> BootResult<IWbemClassWrapper> {
     let context = |stage: &str, e: wmi::WMIError| {
         let mut e = crate::native::wmi_error(e);
         e.details["stage"] = serde_json::json!(format!("{class}.{method}:{stage}"));
@@ -160,6 +183,9 @@ pub(crate) fn call(
     } else {
         None
     };
+    // Signature lookup and argument marshaling cannot mutate BCD. Only the
+    // provider invocation crosses the uncertain-write boundary.
+    before_invoke();
     connection
         .exec_method(path, method, input.as_ref())
         .map_err(|e| context("invoke", e))?

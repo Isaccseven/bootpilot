@@ -18,6 +18,8 @@ struct FakeSystem {
     writes: usize,
     fail: Option<usize>,
     race: bool,
+    desired_collision: bool,
+    post_write_failure: bool,
     foreign: bool,
     concurrency: Option<Arc<AtomicUsize>>,
 }
@@ -46,8 +48,11 @@ impl SystemAccess for FakeSystem {
         target: &Target,
         expected: &TargetValue,
         replacement: &TargetValue,
-    ) -> BootResult<()> {
+    ) -> TargetWriteResult {
         self.writes += 1;
+        if self.desired_collision && self.writes == 1 {
+            self.values.insert(*target, replacement.clone());
+        }
         if self.race && self.writes == 1 {
             self.values
                 .insert(*target, TargetValue::FileBytes(b"foreign".to_vec()));
@@ -59,12 +64,17 @@ impl SystemAccess for FakeSystem {
                     TargetValue::FileBytes(b"foreign".to_vec()),
                 );
             }
-            return Err(err(ErrorCode::Io));
+            return Err(WriteFailure::NotWritten(err(ErrorCode::Io)));
         }
         if &self.values[target] != expected {
-            return Err(err(ErrorCode::Conflict));
+            return Err(WriteFailure::NotWritten(err(ErrorCode::Conflict)));
         }
         self.values.insert(*target, replacement.clone());
+        if self.post_write_failure && self.writes == 1 {
+            return Err(WriteFailure::MayHaveWritten(err(
+                ErrorCode::VerificationFailed,
+            )));
+        }
         Ok(())
     }
 }
@@ -194,6 +204,8 @@ fn fixture() -> (FakeSystem, Store) {
             writes: 0,
             fail: None,
             race: false,
+            desired_collision: false,
+            post_write_failure: false,
             foreign: false,
             concurrency: None,
         },
@@ -397,7 +409,28 @@ fn interrupted_after_first_write_offers_exact_targeted_restore() {
     system
         .values
         .insert(first.target, first.replacement.clone());
-    // Simulate restart after the write but before Written/Verified were persisted.
+    // An Intent alone must not authorize recovery even if bytes equal the desired value.
+    assert!(
+        prepare_restore(
+            &system.read_snapshot().unwrap(),
+            &store.load_backup(backup.id).unwrap(),
+            Utc::now()
+        )
+        .is_err()
+    );
+    store
+        .record_step(
+            backup.id,
+            &JournalStep {
+                sequence: 2,
+                target: first.target,
+                phase: StepPhase::Written,
+                at: Utc::now(),
+                detail: None,
+            },
+        )
+        .unwrap();
+    // Simulate restart after Written but before Verified was persisted.
     let restore = prepare_restore(
         &system.read_snapshot().unwrap(),
         &store.load_backup(backup.id).unwrap(),
@@ -502,9 +535,14 @@ fn temporary_file_transaction_and_restore_round_trip() {
         fn read_target(&mut self, t: &Target) -> BootResult<TargetValue> {
             Ok(TargetValue::FileBytes(std::fs::read(self.path(t)).unwrap()))
         }
-        fn write_target(&mut self, t: &Target, e: &TargetValue, r: &TargetValue) -> BootResult<()> {
-            if self.read_target(t)? != *e {
-                return Err(err(ErrorCode::Conflict));
+        fn write_target(
+            &mut self,
+            t: &Target,
+            e: &TargetValue,
+            r: &TargetValue,
+        ) -> TargetWriteResult {
+            if self.read_target(t).map_err(WriteFailure::NotWritten)? != *e {
+                return Err(WriteFailure::NotWritten(err(ErrorCode::Conflict)));
             }
             let TargetValue::FileBytes(bytes) = r else {
                 panic!()
@@ -554,4 +592,75 @@ fn temporary_file_transaction_and_restore_round_trip() {
     for (target, value) in original {
         assert_eq!(system.read_target(&target).unwrap(), value);
     }
+}
+
+#[test]
+fn rejected_desired_value_collision_never_rolls_back_or_restores_foreign_value() {
+    for fail_receipt in [false, true] {
+        let (mut system, mut store) = fixture();
+        system.desired_collision = true;
+        store.fail_step = fail_receipt.then_some(2);
+        let change = store.plan.changes[0].clone();
+        apply(&mut system, &mut store).unwrap();
+        // Exactly one rejected adapter call; no rollback call or target mutation.
+        assert_eq!(system.writes, 1);
+        assert_eq!(system.values[&change.target], change.replacement);
+        let reloaded: Option<BackupRecord> =
+            serde_json::from_slice(&std::fs::read(store.directory.join("journal.json")).unwrap())
+                .unwrap();
+        let backup = reloaded.unwrap();
+        assert_eq!(
+            backup
+                .journal
+                .iter()
+                .any(|s| s.phase == StepPhase::NotWritten),
+            !fail_receipt
+        );
+        assert!(prepare_restore(&system.read_snapshot().unwrap(), &backup, Utc::now()).is_err());
+        assert_eq!(system.values[&change.target], change.replacement);
+    }
+}
+
+#[test]
+fn postwrite_failure_still_rolls_back_with_or_without_durable_receipt() {
+    for fail_receipt in [false, true] {
+        let (mut system, mut store) = fixture();
+        let original = system.values.clone();
+        system.post_write_failure = true;
+        store.fail_step = fail_receipt.then_some(2);
+        let report = apply(&mut system, &mut store).unwrap();
+        assert_eq!(report.outcome, ApplyOutcome::RolledBack);
+        assert_eq!(system.writes, 2);
+        assert_eq!(system.values, original);
+        let backup = store.load_backup(store.plan.id).unwrap();
+        assert_eq!(
+            backup
+                .journal
+                .iter()
+                .any(|s| s.phase == StepPhase::WriteUncertain),
+            !fail_receipt
+        );
+    }
+}
+
+#[test]
+fn completed_rollback_cannot_authorize_restore_of_later_foreign_desired_value() {
+    let (mut system, mut store) = fixture();
+    system.fail = Some(2);
+    assert_eq!(
+        apply(&mut system, &mut store).unwrap().outcome,
+        ApplyOutcome::RolledBack
+    );
+    let first = &store.plan.changes[0];
+    system
+        .values
+        .insert(first.target, first.replacement.clone());
+    assert!(
+        prepare_restore(
+            &system.read_snapshot().unwrap(),
+            &store.load_backup(store.plan.id).unwrap(),
+            Utc::now()
+        )
+        .is_err()
+    );
 }

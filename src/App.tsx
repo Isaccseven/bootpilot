@@ -89,6 +89,8 @@ const outcomeNames = {
 const phaseNames = {
   intent: "Vorbereitet",
   written: "Geschrieben",
+  not_written: "Nicht geschrieben",
+  write_uncertain: "Schreibausgang ungewiss",
   verified: "Geprüft",
   rollback_intent: "Rücknahme vorbereitet",
   rolled_back: "Zurückgenommen",

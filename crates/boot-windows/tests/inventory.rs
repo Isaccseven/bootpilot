@@ -104,6 +104,7 @@ fn native_write_adapter_is_closed() {
         system
             .write_target(&Target::FirmwareOrder, &value, &value)
             .unwrap_err()
+            .into_error()
             .code,
         ErrorCode::InvalidRequest
     );

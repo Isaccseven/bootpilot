@@ -18,12 +18,18 @@ impl SystemAccess for Fake {
             self.snapshot.firmware_order.clone(),
         ))
     }
-    fn write_target(&mut self, t: &Target, e: &TargetValue, r: &TargetValue) -> BootResult<()> {
-        if self.read_target(t)? != *e {
-            return Err(crate::error(ErrorCode::Conflict, "Fake-Ziel verändert"));
+    fn write_target(&mut self, t: &Target, e: &TargetValue, r: &TargetValue) -> TargetWriteResult {
+        if self.read_target(t).map_err(WriteFailure::NotWritten)? != *e {
+            return Err(WriteFailure::NotWritten(crate::error(
+                ErrorCode::Conflict,
+                "Fake-Ziel verändert",
+            )));
         }
         let TargetValue::FirmwareOrder(ids) = r else {
-            return Err(crate::error(ErrorCode::InvalidRequest, "Fake-Typ"));
+            return Err(WriteFailure::NotWritten(crate::error(
+                ErrorCode::InvalidRequest,
+                "Fake-Typ",
+            )));
         };
         self.snapshot.firmware_order = ids.clone();
         self.writes += 1;
