@@ -37,6 +37,16 @@ cargo build --locked --package boot-mcp
 npm run test:mcp
 ```
 
+Der Frontend-Build erfolgt vor den Rust-Workspace-Prüfungen, damit Tauri seine
+lokalen Webressourcen beim Kompilieren vorfindet. Sobald Aufgabe 7 Tauri-Sidecars
+über `externalBin` einbindet, muss deren Vorbereitung in **beiden** Workflows vor
+`cargo clippy` und `cargo test` ergänzt werden: `build.rs` beziehungsweise die
+Tauri-Makros können die Dateien bereits beim Kompilieren benötigen. Der konkrete
+Vorbereitungsschritt wird mit dem Build-Skript aus Aufgabe 7 verbunden. Bis diese
+Integration geprüft ist, bestätigt ein älterer grüner Core-Lauf keine erfolgreiche
+Tauri-Kompilierung; das App-Paket darf bei den Workspace-Prüfungen nicht
+ausgeschlossen werden.
+
 Fehlende npm-Skripte oder das fehlende Paket `boot-mcp` lassen den Lauf dann
 fehlschlagen; sie werden nicht stillschweigend übersprungen. `test:mcp` muss
 temporäre Daten beziehungsweise Fixtures verwenden und darf weder UAC noch
