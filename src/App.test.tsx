@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -71,6 +71,94 @@ describe("ehrliche Systemansicht", () => {
   });
 });
 describe("sichtbarer Änderungsplan", () => {
+  it("fresh_authoritative_scan_plan_can_apply_after_visible_acknowledgment", async () => {
+    const user = await menu();
+    await user.click(screen.getByRole("button", { name: "Aktualisieren" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Menüvorschau erstellen" }),
+      ).toBeEnabled(),
+    );
+    const freshPlan = plan();
+    expect(freshPlan.snapshot_id).not.toBe(snapshot.id);
+    ipc.invoke.mockResolvedValueOnce(freshPlan);
+    await user.click(
+      screen.getByRole("button", { name: "Menüvorschau erstellen" }),
+    );
+    const preview = await screen.findByRole("region", {
+      name: "Änderungsvorschau",
+    });
+    expect(within(preview).getByText(freshPlan.snapshot_id)).toBeVisible();
+    expect(within(preview).getByText("set timeout=3")).toBeVisible();
+    expect(within(preview).getByText("set timeout=5")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Änderungen anwenden" }),
+    ).toBeDisabled();
+    expect(ipc.invoke.mock.calls.some((c) => c[0] === "apply")).toBe(false);
+    const acknowledgment = screen.getByRole("checkbox", {
+      name: /Vorschau geprüft/,
+    });
+    expect(acknowledgment).toBeEnabled();
+    await user.click(acknowledgment);
+    await user.click(
+      screen.getByRole("button", { name: "Änderungen anwenden" }),
+    );
+    await waitFor(() =>
+      expect(ipc.invoke).toHaveBeenCalledWith("apply", {
+        planId: freshPlan.id,
+      }),
+    );
+    expect(await screen.findByText("Teilweise ausgeführt")).toBeVisible();
+  });
+  it("delayed_prepare_cannot_restore_plan_after_navigation", async () => {
+    const user = await menu();
+    let complete!: (value: ReturnType<typeof plan>) => void;
+    const pending = new Promise<ReturnType<typeof plan>>((resolve) => {
+      complete = resolve;
+    });
+    ipc.invoke.mockReturnValueOnce(pending);
+    await user.click(
+      screen.getByRole("button", { name: "Menüvorschau erstellen" }),
+    );
+    // Editing and refresh cannot race a running prepare; navigation stays usable.
+    expect(
+      screen.getByRole("spinbutton", { name: "Wartezeit in Sekunden" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Aktualisieren" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Übersicht" }));
+    await user.click(screen.getByRole("button", { name: "Bootmenü" }));
+    await act(async () => {
+      complete(plan());
+      await pending;
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Menüvorschau erstellen" }),
+      ).toBeEnabled(),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Änderungsvorschau" }),
+    ).not.toBeInTheDocument();
+    expect(ipc.invoke.mock.calls.some((c) => c[0] === "apply")).toBe(false);
+  });
+  it("refresh_discards_a_previously_visible_plan", async () => {
+    const user = await menu();
+    await user.click(
+      screen.getByRole("button", { name: "Menüvorschau erstellen" }),
+    );
+    await screen.findByRole("region", { name: "Änderungsvorschau" });
+    await user.click(screen.getByRole("button", { name: "Aktualisieren" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Aktualisieren" }),
+      ).toBeEnabled(),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Änderungsvorschau" }),
+    ).not.toBeInTheDocument();
+  });
   it("validated_candidate_can_be_prepared_from_partial_linux_inventory", async () => {
     ipc.invoke.mockResolvedValueOnce({
       ...snapshot,

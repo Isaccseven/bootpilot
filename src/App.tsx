@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, asBootError } from "./api";
 import type {
   ApplyReport,
@@ -296,8 +296,8 @@ function Preview({
       )}
       {blocked && (
         <p className="notice warning">
-          Die Erfassung ist veraltet oder passt nicht zu diesem Plan.
-          Aktualisiere und erstelle eine neue Vorschau.
+          Es liegt keine aktuelle Erfassung vor. Aktualisiere und erstelle eine
+          neue Vorschau.
         </p>
       )}
       {plan.state !== "ready" && (
@@ -1072,6 +1072,9 @@ export default function App() {
   const [registration, setRegistration] = useState<RegistrationResult | null>(
     null,
   );
+  // A scan UUID identifies provenance, not target state. Invalidate asynchronous
+  // previews by the UI interaction that requested them; core checks real state.
+  const planGeneration = useRef(0);
   useEffect(() => {
     let active = true;
     api
@@ -1087,8 +1090,13 @@ export default function App() {
       });
     return () => {
       active = false;
+      planGeneration.current += 1;
     };
   }, []);
+  function invalidatePlan() {
+    planGeneration.current += 1;
+    setPlan(null);
+  }
   async function run(label: string, action: () => Promise<void>) {
     if (busy) return;
     setBusy(label);
@@ -1102,6 +1110,7 @@ export default function App() {
     }
   }
   function navigate(next: View) {
+    if (next !== view) invalidatePlan();
     setView(next);
     if (next === "backups" && backups === null && !busy)
       void run("Sicherungen laden", async () =>
@@ -1113,8 +1122,9 @@ export default function App() {
       );
   }
   function refresh() {
+    if (busy) return;
+    invalidatePlan();
     void run("System erfassen", async () => {
-      setPlan(null);
       try {
         const fresh = await api.refresh();
         setSnapshot(fresh);
@@ -1127,10 +1137,13 @@ export default function App() {
     });
   }
   function prepare(request: PlanRequest) {
+    if (busy) return;
+    const generation = ++planGeneration.current;
     void run("Vorschau vorbereiten", async () => {
       setPlan(null);
       setReport(null);
-      setPlan(await api.prepare(request));
+      const prepared = await api.prepare(request);
+      if (generation === planGeneration.current) setPlan(prepared);
     });
   }
   function apply() {
@@ -1138,7 +1151,6 @@ export default function App() {
       !plan ||
       stale ||
       !snapshot ||
-      plan.snapshot_id !== snapshot.id ||
       plan.state !== "ready" ||
       Date.now() >= Date.parse(plan.expires_at)
     )
@@ -1150,7 +1162,7 @@ export default function App() {
         setStale(true);
         setBackups(null);
       } finally {
-        setPlan(null);
+        invalidatePlan();
         setStale(true);
       }
     });
@@ -1292,7 +1304,7 @@ export default function App() {
               blocked={stale}
               busy={!!busy}
               onPrepare={prepare}
-              invalidate={() => setPlan(null)}
+              invalidate={invalidatePlan}
             />
           )}
           {view === "backups" && (
@@ -1329,10 +1341,10 @@ export default function App() {
             <Preview
               key={plan.id}
               plan={plan}
-              blocked={stale || !snapshot || snapshot.id !== plan.snapshot_id}
+              blocked={stale || !snapshot}
               busy={!!busy}
               onApply={apply}
-              onDismiss={() => setPlan(null)}
+              onDismiss={invalidatePlan}
             />
           )}
           {report && <Report report={report} />}

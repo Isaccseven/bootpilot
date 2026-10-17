@@ -58,7 +58,8 @@ export function plan(expires = Date.now() + 15 * 60000): ChangePlan {
     id: "plan-1",
     created_at: new Date().toISOString(),
     expires_at: new Date(expires).toISOString(),
-    snapshot_id: snapshot.id,
+    // Prepare collects a separate authoritative scan, even if targets match.
+    snapshot_id: "authoritative-snapshot-2",
     request: { kind: "menu", default_entry_id: "windows", timeout_seconds: 5 },
     diffs: [
       {
