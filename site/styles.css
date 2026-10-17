@@ -42,7 +42,8 @@
   --line-small: 1.5;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--canvas); color: var(--text); font: var(--weight-body) var(--type-body)/var(--line-body) var(--font-ui); }
+/* Preserve enlarged text by wrapping long words instead of clipping or shrinking. */
+body { overflow-wrap: anywhere; margin: 0; background: var(--canvas); color: var(--text); font: var(--weight-body) var(--type-body)/var(--line-body) var(--font-ui); }
 h1, h2, h3, p, figure { margin: 0; }
 h1, h2, h3 { font-weight: var(--weight-emphasis); text-wrap: balance; }
 h1 { font-size: var(--type-hero); line-height: var(--line-hero); }
