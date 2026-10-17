@@ -66,7 +66,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - `SystemAccess`: `read_snapshot(&mut self) -> BootResult<Snapshot>`, `read_target(&mut self, target: &Target) -> BootResult<TargetValue>`, `write_target(&mut self, target: &Target, expected: &TargetValue, replacement: &TargetValue) -> BootResult<()>`. `Target` erlaubt nur Firmware-Reihenfolge und die erkannten GRUB-Dateien; keine Pfadzeichenkette als Schreibziel. Der Write-Adapter prüft den erwarteten Wert unmittelbar vor dem Schreiben erneut; eine nicht atomar vergleichbare Firmware-Operation erhält zusätzlich eine nachgelagerte Prüfung.
 - `PlanStore`: `save_plan(&mut self, plan: &ChangePlan) -> BootResult<()>`, `load_plan(&self, id: Uuid) -> BootResult<ChangePlan>`, `begin_backup(&mut self, plan: &ChangePlan, originals: &[(Target, TargetValue)]) -> BootResult<BackupRecord>`, `record_step(&mut self, id: Uuid, step: &JournalStep) -> BootResult<()>`, `finish_plan(&mut self, id: Uuid, outcome: &ApplyReport) -> BootResult<()>`, `list_backups(&self) -> BootResult<Vec<BackupRecord>>`, `load_backup(&self, id: Uuid) -> BootResult<BackupRecord>`. Wiederanlauf und Listen müssen auch unvollständige Journale sichtbar machen; ein begonnener Plan wird nicht erneut als frischer Plan ausgeführt.
 
-## Aufgabe 1: Rust-Kern, Datenmodell und belegte Diagnose
+### Task 1: Rust-Kern, Datenmodell und belegte Diagnose
 
 **Dateien:** Workspace-Manifeste; `crates/boot-core/{Cargo.toml,src/lib.rs,src/model.rs,src/error.rs,src/diagnose.rs,tests/validation.rs}`; `tests/fixtures/`.
 
@@ -78,7 +78,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - [ ] Typen und Validierung implementieren. IDs als UUID bzw. bekannte Menu-IDs normalisieren; keine Maschinen-GUIDs oder Bootpfade fest einbauen. Erfassungsfehler bleiben strukturierte Daten.
 - [ ] Denselben Test erfolgreich ausführen, `cargo fmt --check` prüfen und als `feat: define shared boot model and diagnostics` committen.
 
-## Aufgabe 2: Windows-Erfassung und begrenzter UAC-Helfer
+### Task 2: Windows-Erfassung und begrenzter UAC-Helfer
 
 **Dateien:** `crates/boot-windows/`, `crates/boot-admin/`; Tests `inventory.rs`, `broker.rs`, `storage.rs`.
 
@@ -91,7 +91,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - [ ] Autoritative Pläne, Sicherungen und Journal unter einem geprüften, nicht umleitbaren ProgramData-Verzeichnis speichern. Normale Benutzer erhalten keinen Schreibzugriff auf fremde oder autoritative Plan-/Sicherungsdateien. Benutzercaches sind keine Quelle für erhöhte Schreibentscheidungen. Der Helper prüft seine Requests unabhängig vom Frontend.
 - [ ] `cargo test -p boot-windows` erfolgreich ausführen. Ein echter lesender Refresh darf UAC erfordern; Status und Vollständigkeit mit vorhandenen Diagnosebefunden vergleichen, ohne Änderungen anzuwenden. Als `feat: collect Windows boot state through restricted helper` committen.
 
-## Aufgabe 3: GRUB lesen und konkrete Änderungspläne erstellen
+### Task 3: GRUB lesen und konkrete Änderungspläne erstellen
 
 **Dateien:** `crates/boot-core/src/{grub,plan}.rs`, `crates/boot-core/tests/grub.rs`; GRUB-Fixtures unter `tests/fixtures/`.
 
@@ -103,7 +103,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - [ ] Menüpläne verändern nur eindeutig erkannte Default-/Timeout-Zuweisungen und die beiden synchronen Benutzersektionen. Default-IDs werden auf die tatsächlich unterstützte GRUB-Referenz aufgelöst. CachyOS-Kandidaten stammen aus geprüftem Volume, vorhandenen Kernel-/Initramfs-Dateien und der bestehenden Konfiguration; Steuerzeichen, GRUB-Metazeichen, Traversal und nicht unterstützte Parameter ablehnen. Titel korrekt quoten; bestehende Installer/Fallbacks erhalten.
 - [ ] Denselben Test erfolgreich ausführen. Erzeugte Fixture-Konfigurationen mit vorhandenem `grub-script-check` prüfen; dieser ergänzende Buildtest ersetzt nicht die eigene Validierung. Als `feat: preview validated GRUB and firmware changes` committen.
 
-## Aufgabe 4: Anwenden, Sicherung und gezielte Wiederherstellung
+### Task 4: Anwenden, Sicherung und gezielte Wiederherstellung
 
 **Dateien:** `crates/boot-core/src/transaction.rs`, `crates/boot-core/tests/transactions.rs`, geschützte Store-/Write-Adapter in `boot-windows`, Dispatch in `boot-admin`.
 
@@ -115,7 +115,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - [ ] Journal vor und nach jedem Schreibschritt dauerhaft speichern. Bei Fehlern nur tatsächlich eigene Änderungen zurücknehmen, deren aktueller Wert noch dem geschriebenen Wert entspricht. Prozessabbruch erzeugt bei erneutem Start einen sichtbaren unvollständigen Vorgang; keine heimliche automatische Wiederherstellung. Sichere Rücknahme als neuen prüfbaren Plan anbieten. Erfolgreiche Pläne als verbraucht markieren.
 - [ ] Tests erfolgreich ausführen und Fehlerbericht/Teilzustand prüfen. Keine Tests gegen echte Boot-Schreibziele ausführen. Als `feat: apply backed-up plans with guarded recovery` committen.
 
-## Aufgabe 5: Gemeinsamer Dienst, CLI und Codex-MCP
+### Task 5: Gemeinsamer Dienst, CLI und Codex-MCP
 
 **Dateien:** `crates/boot-service/`, `crates/boot-cli/`, `crates/boot-mcp/`, `tests/mcp-smoke.mjs`.
 
@@ -127,7 +127,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - [ ] CLI `boot-cli status|refresh|diagnose|backups --json` ergänzen. Fehler auf stderr, definierte Exitcodes; MCP stdout ausschließlich JSON-RPC. Lokale Snapshot-Caches mit Erfassungszeit anzeigen; ohne Cache `null` und „Noch keine Erfassung“ statt Beispieldaten zurückgeben.
 - [ ] `cargo test -p boot-service -p boot-mcp` und `npm run test:mcp` erfolgreich ausführen. Zusätzlich echte MCP-Initialisierung, Toolinventar und `boot_get_status`/lesende Erfassung starten. Als `feat: expose BootPilot through CLI and Codex MCP` committen.
 
-## Aufgabe 6: Tauri-Oberfläche mit Vorschau und Ergebnissen
+### Task 6: Tauri-Oberfläche mit Vorschau und Ergebnissen
 
 **Dateien:** `src-tauri/`, `src/`, `index.html`, TypeScript-/Vite-Konfiguration; Tests `src/{App,preview,backups}.test.tsx`.
 
@@ -139,7 +139,7 @@ Repository: `work/bootpilot`. Auslieferung: `outputs/BootPilot`. Die Codeänderu
 - [ ] Tauri `AppManifest::commands` und eigene Permissions verwenden, Capability nur für Fenster `main`, kein Shell-/Filesystem-Plugin. Lokaler CSP, keine Remote-Skripte. UAC läuft im Rust-Backend, nicht im Browser; UI bleibt währenddessen bedienbar. `get_integration_status` zeigt eingerichteten Pfad und getrennt davon einen tatsächlich gemessenen Verbindungstest.
 - [ ] `npm run test:ui`, `npm run typecheck`, `npm run build` und `cargo check -p bootpilot-app` erfolgreich ausführen. Windows-App starten und echte Daten sowie Vorschau-/Fehleransichten sichtbar kontrollieren. Als `feat: add Tauri boot management interface` committen.
 
-## Aufgabe 7: Windows-Paket, Integration und Auslieferungsprüfung
+### Task 7: Windows-Paket, Integration und Auslieferungsprüfung
 
 **Dateien:** `scripts/`, `docs/`, Tauri-Bundlekonfiguration, eigener App-Icon-Satz; Ausgaben unter `outputs/BootPilot/`.
 
