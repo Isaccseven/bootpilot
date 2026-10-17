@@ -167,16 +167,40 @@ fn ambiguous_or_unsupported_menu_cannot_authorize_changes() {
 fn only_verified_linux_candidates_and_plain_titles_are_accepted() {
     let mut snapshot = snapshot();
     snapshot.sources.linux = CollectionState::Complete;
+    snapshot.sources.volumes = CollectionState::Complete;
+    snapshot.volumes.push(VolumeInfo {
+        volume_id: Some(Uuid::from_u128(50)),
+        partition_id: None,
+        paths: vec![],
+        filesystem: Some("FAT32".into()),
+        filesystem_uuid: Some("AB12-CD34".into()),
+        size_bytes: None,
+        disk_number: None,
+        partition_number: None,
+        gpt_type: None,
+    });
     let candidate = LinuxCandidate {
         id: Uuid::from_u128(40),
         title: "CachyOS".into(),
         volume_id: Uuid::from_u128(50),
-        filesystem_uuid: "11111111-2222-3333-4444-555555555555".into(),
+        filesystem_uuid: "AB12-CD34".into(),
         kernel_path: "/boot/vmlinuz-linux-cachyos".into(),
         initramfs_paths: vec!["/boot/initramfs-linux-cachyos.img".into()],
-        kernel_parameters: vec!["rw".into()],
+        kernel_parameters: vec![
+            "rw".into(),
+            "root=UUID=11111111-2222-3333-4444-555555555555".into(),
+        ],
         validated: true,
-        evidence: vec![],
+        evidence: vec![
+            EvidenceRef {
+                source: Source::Volumes,
+                reference: "volumes[0]".into(),
+            },
+            EvidenceRef {
+                source: Source::Linux,
+                reference: "verified_config_and_images".into(),
+            },
+        ],
     };
     snapshot.linux_candidates.push(candidate);
     let request = PlanRequest::Cachyos {

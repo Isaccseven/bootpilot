@@ -1,0 +1,3 @@
+# Synthetic byte-preservation fixtures: retain authored CRLF and main BOM.
+grub-main.cfg -text whitespace=cr-at-eol
+grub-user.cfg -text whitespace=cr-at-eol

@@ -40,7 +40,15 @@ pub fn validate_request(request: &PlanRequest, snapshot: &Snapshot) -> BootResul
             title,
         } => {
             writable_grub(snapshot)?;
-            require_complete(snapshot.sources.linux)?;
+            if !matches!(
+                snapshot.sources.linux,
+                CollectionState::Complete | CollectionState::Partial
+            ) {
+                return Err(BootError::new(
+                    ErrorCode::IncompleteSnapshot,
+                    "Die Linux-Quelle wurde nicht erfasst.",
+                ));
+            }
             let candidates: Vec<_> = snapshot
                 .linux_candidates
                 .iter()
@@ -52,6 +60,7 @@ pub fn validate_request(request: &PlanRequest, snapshot: &Snapshot) -> BootResul
                     "Der Linux-Kandidat ist nicht eindeutig geprüft.",
                 ));
             }
+            crate::plan::validate_candidate(candidates[0], snapshot)?;
             if title.trim().is_empty()
                 || title.chars().count() > 120
                 || title.chars().any(char::is_control)

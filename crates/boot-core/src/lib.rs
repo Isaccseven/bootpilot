@@ -7,3 +7,7 @@ pub mod model;
 pub use diagnose::{diagnose, validate_request};
 pub use error::{BootError, BootResult, ErrorCode};
 pub use model::*;
+pub mod grub;
+pub mod plan;
+pub use grub::parse_grub;
+pub use plan::{prepare_plan, target_checksum};
